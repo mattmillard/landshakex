@@ -1,0 +1,9 @@
+{
+  "service_url": "https://services2.integritygis.com/arcgis/rest/Services/MO/Cooper_Assessor_Data/MapServer",
+  "source": "data/raw/cooper_mo/cooper_parcels.geojson",
+  "output": "data/processed/cooper_mo/cooper_parcels_for_supabase.ndjson",
+  "feature_count_reported": 12351,
+  "feature_count_downloaded": 12351,
+  "insertable_count": 12350,
+  "rejected_count": 1
+}
