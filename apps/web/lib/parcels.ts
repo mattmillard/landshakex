@@ -1,4 +1,4 @@
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 export type ParcelSummaryDTO = {
   id: number;
@@ -10,6 +10,7 @@ export type ParcelSummaryDTO = {
 };
 
 export async function getParcelByPoint(lng: number, lat: number) {
+  const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin.rpc("get_parcel_by_point", {
     p_lng: lng,
     p_lat: lat
@@ -26,6 +27,7 @@ export async function getParcelsByBbox(
   maxLat: number,
   limit: number
 ) {
+  const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin.rpc("get_parcels_by_bbox", {
     p_min_lng: minLng,
     p_min_lat: minLat,
@@ -39,6 +41,7 @@ export async function getParcelsByBbox(
 }
 
 export async function getParcelById(id: number) {
+  const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
     .from("parcels")
     .select("id, apn, owner_name, acreage, county, state, land_use, zoning, assessed_value, metadata")
