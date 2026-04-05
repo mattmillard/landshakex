@@ -102,7 +102,7 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
         }
 
         if (headingElRef.current) {
-          headingElRef.current.style.transform = `translate(-50%, calc(-100% - 1px)) rotate(${headingRef.current}deg)`;
+          headingElRef.current.style.transform = `translate(-50%, calc(-100% - 0.625rem)) rotate(${headingRef.current}deg)`;
         } else if (markerRef.current && "setIcon" in markerRef.current) {
           markerRef.current.setIcon(createUserIcon(headingRef.current));
         }
@@ -145,7 +145,7 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
               if (markerLib?.AdvancedMarkerElement) {
                 const { wrapper, headingEl } = createUserPinElement();
                 headingElRef.current = headingEl;
-                headingEl.style.transform = `translate(-50%, calc(-100% - 1px)) rotate(${headingRef.current}deg)`;
+                headingEl.style.transform = `translate(-50%, calc(-100% - 0.625rem)) rotate(${headingRef.current}deg)`;
 
                 markerRef.current = new markerLib.AdvancedMarkerElement({
                   map,
@@ -244,7 +244,7 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
       }
 
       if (headingElRef.current) {
-        headingElRef.current.style.transform = `translate(-50%, calc(-100% - 1px)) rotate(${headingRef.current}deg)`;
+        headingElRef.current.style.transform = `translate(-50%, calc(-100% - 0.625rem)) rotate(${headingRef.current}deg)`;
       }
 
       if (followUser) {

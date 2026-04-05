@@ -186,7 +186,7 @@ export default function MapView({ onMapReady }: Props) {
 
       const headingEl = marker.getElement().querySelector(".user-pin-heading") as HTMLDivElement | null;
       if (headingEl) {
-        headingEl.style.transform = `translate(-50%, calc(-100% - 1px)) rotate(${headingRef.current}deg)`;
+        headingEl.style.transform = `translate(-50%, calc(-100% - 0.625rem)) rotate(${headingRef.current}deg)`;
       }
 
       if (followUser) {
