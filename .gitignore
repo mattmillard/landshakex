@@ -1,7 +1,16 @@
-apps/web/node_modules/
-apps/web/.next/
+node_modules/
+.next/
 *.tsbuildinfo
 .DS_Store
+
+# nested app artifacts (legacy)
+apps/web/node_modules/
+apps/web/.next/
+apps/web/.vercel/
+
+# local env & vercel
+.env.local
+.vercel/
 
 # local backups and large data exports
 backups/

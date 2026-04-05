@@ -32,30 +32,37 @@ This app requires geospatial polygon/point queries, parcel intersections, viewpo
 - `POST /api/offline/areas`
 - `POST /api/shares`
 
-## Initial repo layout
+## Repository layout (Vercel auto-detect)
+This repo is now a **root-level Next.js app** so Vercel can detect it automatically on GitHub import.
+
 ```txt
 landshakex/
-  apps/
-    web/
-  packages/
-    ui/
-    types/
-    map-style/
+  app/
+  components/
+  lib/
+  package.json
+  next.config.mjs
+  tsconfig.json
+  postcss.config.mjs
+  tailwind.config.ts
+  .env.example
   infra/
-    supabase/
-      migrations/
-      seed/
-    scripts/
   docs/
 ```
 
+## Deployment (Vercel)
+- Import repo from GitHub
+- Framework preset should auto-detect as **Next.js**
+- Build command: `next build` (auto)
+- Output: `.next` (auto)
+
 ## Next actions
-1. Run migrations:
+1. Set root `.env.local` from `.env.example`
+2. Run migrations:
    - `infra/supabase/migrations/0001_init.sql`
    - `infra/supabase/migrations/0002_parcels_rpc.sql`
-2. Set `apps/web/.env` from `apps/web/.env.example`
 3. Import your first county parcel dataset into `parcels`
-4. Verify API routes now query Supabase/PostGIS:
+4. Verify API routes:
    - `GET /api/parcels/point`
    - `GET /api/parcels/bbox`
    - `GET /api/parcels/:id`

@@ -1,21 +1,10 @@
-# apps/web
+# apps/web (legacy path)
 
-LandShakeX web app (Next.js + MapLibre).
+This directory is now legacy. The active deployable Next.js app is at repository root.
 
-## Run locally
-```bash
-npm install
-npm run dev
-```
+Use root-level commands:
+- `npm install`
+- `npm run dev`
+- `npm run build`
 
-Open: http://localhost:3000
-
-## API stubs included
-- `GET /api/parcels/point?lng=&lat=`
-- `GET /api/parcels/bbox?minLng=&minLat=&maxLng=&maxLat=&limit=`
-- `GET /api/parcels/:id`
-
-These currently return mock data and are ready for PostGIS wiring.
-
-## Env
-- `NEXT_PUBLIC_MAP_STYLE_URL` (optional)
+Kept temporarily for transition only.
