@@ -54,20 +54,84 @@ html, body {
   font-weight: 700;
 }
 
-.map-debug-panel {
+.parcel-sheet {
   position: fixed;
-  top: 74px;
-  left: 14px;
-  z-index: 20;
-  min-width: 170px;
-  background: rgba(12, 18, 30, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 12px;
-  line-height: 1.5;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 30;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(9, 15, 25, 0.92);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+  padding: 12px;
+}
+
+.parcel-sheet-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.parcel-sheet-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.75;
+}
+
+.parcel-sheet-title {
+  margin-top: 4px;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.parcel-sheet-close {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
   color: #e5e7eb;
-  backdrop-filter: blur(8px);
+  border-radius: 10px;
+  padding: 7px 11px;
+  font-size: 12px;
+}
+
+.parcel-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.parcel-grid div {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  min-height: 54px;
+}
+
+.parcel-grid span {
+  display: block;
+  font-size: 11px;
+  opacity: 0.75;
+  margin-bottom: 4px;
+}
+
+.parcel-grid strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+@media (min-width: 768px) {
+  .parcel-sheet {
+    left: auto;
+    right: 16px;
+    width: min(420px, calc(100vw - 32px));
+  }
 }
 
 .user-pin {

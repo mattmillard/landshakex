@@ -13,6 +13,15 @@ type Props = {
   onMapReady?: () => void;
 };
 
+type ParcelFeatureProps = {
+  id?: number;
+  apn?: string;
+  owner_name?: string;
+  acreage?: number;
+  county?: string;
+  state?: string;
+};
+
 const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
 
 function loadGoogleMaps(apiKey: string): Promise<void> {
@@ -62,6 +71,17 @@ function createUserPinElement() {
   return { wrapper, headingEl };
 }
 
+function normalizeParcelProps(raw: Record<string, unknown>): ParcelFeatureProps {
+  return {
+    id: typeof raw.id === "number" ? raw.id : Number(raw.id),
+    apn: typeof raw.apn === "string" ? raw.apn : undefined,
+    owner_name: typeof raw.owner_name === "string" ? raw.owner_name : undefined,
+    acreage: typeof raw.acreage === "number" ? raw.acreage : Number(raw.acreage),
+    county: typeof raw.county === "string" ? raw.county : undefined,
+    state: typeof raw.state === "string" ? raw.state : undefined
+  };
+}
+
 export default function GoogleMapView({ apiKey, onMapReady }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -69,6 +89,7 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
   const headingRef = useRef<number>(0);
   const headingElRef = useRef<HTMLDivElement | null>(null);
   const orientationHandlerRef = useRef<((e: DeviceOrientationEvent) => void) | null>(null);
+  const parcelPolygonsRef = useRef<google.maps.Polygon[]>([]);
 
   const watchIdRef = useRef<number | null>(null);
   const targetRef = useRef<google.maps.LatLngLiteral | null>(null);
@@ -77,6 +98,7 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
 
   const [followUser, setFollowUser] = useState(false);
   const [mapTypeId, setMapTypeId] = useState<"roadmap" | "satellite" | "hybrid">("satellite");
+  const [selectedParcel, setSelectedParcel] = useState<ParcelFeatureProps | null>(null);
 
   useEffect(() => {
     let canceled = false;
@@ -121,7 +143,73 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
         fullscreenControl: false
       });
 
+      const map = mapRef.current;
+
+      const renderParcels = async () => {
+        const bounds = map.getBounds();
+        if (!bounds) return;
+
+        const params = new URLSearchParams({
+          minLng: String(bounds.getSouthWest().lng()),
+          minLat: String(bounds.getSouthWest().lat()),
+          maxLng: String(bounds.getNorthEast().lng()),
+          maxLat: String(bounds.getNorthEast().lat()),
+          limit: "3000"
+        });
+
+        const res = await fetch(`/api/parcels/bbox?${params.toString()}`);
+        if (!res.ok) return;
+        const payload = await res.json();
+        const features = payload?.featureCollection?.features as Array<{ properties?: Record<string, unknown>; geometry?: GeoJSON.Geometry }> | undefined;
+        if (!features || features.length === 0) return;
+
+        parcelPolygonsRef.current.forEach((p) => p.setMap(null));
+        parcelPolygonsRef.current = [];
+
+        for (const feature of features) {
+          const geom = feature.geometry;
+          if (!geom) continue;
+
+          const props = normalizeParcelProps((feature.properties || {}) as Record<string, unknown>);
+
+          if (geom.type === "Polygon") {
+            const paths = geom.coordinates.map((ring) => ring.map(([lng, lat]) => ({ lat, lng })));
+            const poly = new window.google!.maps.Polygon({
+              paths,
+              strokeColor: "#22c55e",
+              strokeOpacity: 0.95,
+              strokeWeight: 1,
+              fillColor: "#22c55e",
+              fillOpacity: 0.04,
+              map
+            });
+            poly.addListener("click", () => setSelectedParcel(props));
+            parcelPolygonsRef.current.push(poly);
+          } else if (geom.type === "MultiPolygon") {
+            for (const polygon of geom.coordinates) {
+              const paths = polygon.map((ring) => ring.map(([lng, lat]) => ({ lat, lng })));
+              const poly = new window.google!.maps.Polygon({
+                paths,
+                strokeColor: "#22c55e",
+                strokeOpacity: 0.95,
+                strokeWeight: 1,
+                fillColor: "#22c55e",
+                fillOpacity: 0.04,
+                map
+              });
+              poly.addListener("click", () => setSelectedParcel(props));
+              parcelPolygonsRef.current.push(poly);
+            }
+          }
+        }
+      };
+
+      map.addListener("idle", () => {
+        void renderParcels();
+      });
+
       onMapReady?.();
+      void renderParcels();
 
       if (navigator.geolocation) {
         watchIdRef.current = navigator.geolocation.watchPosition(
@@ -190,6 +278,9 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
         window.clearInterval(smoothingTimerRef.current);
       }
 
+      parcelPolygonsRef.current.forEach((p) => p.setMap(null));
+      parcelPolygonsRef.current = [];
+
       headingElRef.current = null;
       markerRef.current = null;
       mapRef.current = null;
@@ -213,9 +304,7 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
 
       if ("position" in marker && marker.position) {
         const p = marker.position;
-        if (typeof p.lat === "number" && typeof p.lng === "number") {
-          current = { lat: p.lat, lng: p.lng };
-        }
+        if (typeof p.lat === "number" && typeof p.lng === "number") current = { lat: p.lat, lng: p.lng };
       }
 
       if (!current && "getPosition" in marker) {
@@ -275,6 +364,39 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
           Hybrid
         </button>
       </div>
+
+      {selectedParcel ? (
+        <div className="parcel-sheet">
+          <div className="parcel-sheet-row">
+            <div>
+              <div className="parcel-sheet-eyebrow">Selected Parcel</div>
+              <div className="parcel-sheet-title">{selectedParcel.apn || "Parcel"}</div>
+            </div>
+            <button className="parcel-sheet-close" onClick={() => setSelectedParcel(null)}>
+              Close
+            </button>
+          </div>
+
+          <div className="parcel-grid">
+            <div>
+              <span>Owner</span>
+              <strong>{selectedParcel.owner_name || "—"}</strong>
+            </div>
+            <div>
+              <span>Acreage</span>
+              <strong>{typeof selectedParcel.acreage === "number" && !Number.isNaN(selectedParcel.acreage) ? selectedParcel.acreage.toFixed(2) : "—"}</strong>
+            </div>
+            <div>
+              <span>County</span>
+              <strong>{selectedParcel.county || "—"}</strong>
+            </div>
+            <div>
+              <span>State</span>
+              <strong>{selectedParcel.state || "—"}</strong>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

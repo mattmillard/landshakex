@@ -5,6 +5,7 @@ import maplibregl from "maplibre-gl";
 
 const CENTER: [number, number] = [-98.5795, 39.8283];
 const PARCEL_SOURCE_ID = "parcels";
+const PARCEL_FILL_LAYER_ID = "parcels-fill";
 const PARCEL_LINE_LAYER_ID = "parcels-line";
 
 const STREETS_STYLE = "https://demotiles.maplibre.org/style.json";
@@ -20,13 +21,7 @@ const SATELLITE_STYLE = {
       attribution: "Tiles © Esri"
     }
   },
-  layers: [
-    {
-      id: "satellite",
-      type: "raster",
-      source: "satellite"
-    }
-  ]
+  layers: [{ id: "satellite", type: "raster", source: "satellite" }]
 } as const;
 
 const HYBRID_STYLE = {
@@ -50,21 +45,22 @@ const HYBRID_STYLE = {
     }
   },
   layers: [
-    {
-      id: "satellite",
-      type: "raster",
-      source: "satellite"
-    },
-    {
-      id: "labels",
-      type: "raster",
-      source: "labels"
-    }
+    { id: "satellite", type: "raster", source: "satellite" },
+    { id: "labels", type: "raster", source: "labels" }
   ]
 } as const;
 
 type Props = {
   onMapReady?: () => void;
+};
+
+type ParcelFeatureProps = {
+  id?: number;
+  apn?: string;
+  owner_name?: string;
+  acreage?: number;
+  county?: string;
+  state?: string;
 };
 
 async function fetchParcelFeatureCollection(bounds: maplibregl.LngLatBounds): Promise<GeoJSON.FeatureCollection | null> {
@@ -84,6 +80,17 @@ async function fetchParcelFeatureCollection(bounds: maplibregl.LngLatBounds): Pr
   return fc as GeoJSON.FeatureCollection;
 }
 
+function normalizeParcelProps(raw: Record<string, unknown>): ParcelFeatureProps {
+  return {
+    id: typeof raw.id === "number" ? raw.id : Number(raw.id),
+    apn: typeof raw.apn === "string" ? raw.apn : undefined,
+    owner_name: typeof raw.owner_name === "string" ? raw.owner_name : undefined,
+    acreage: typeof raw.acreage === "number" ? raw.acreage : Number(raw.acreage),
+    county: typeof raw.county === "string" ? raw.county : undefined,
+    state: typeof raw.state === "string" ? raw.state : undefined
+  };
+}
+
 export default function MapView({ onMapReady }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -97,6 +104,7 @@ export default function MapView({ onMapReady }: Props) {
   const smoothingTimerRef = useRef<number | null>(null);
   const hasCenteredRef = useRef(false);
   const [followUser, setFollowUser] = useState(false);
+  const [selectedParcel, setSelectedParcel] = useState<ParcelFeatureProps | null>(null);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -134,6 +142,18 @@ export default function MapView({ onMapReady }: Props) {
         });
       }
 
+      if (!map.getLayer(PARCEL_FILL_LAYER_ID)) {
+        map.addLayer({
+          id: PARCEL_FILL_LAYER_ID,
+          type: "fill",
+          source: PARCEL_SOURCE_ID,
+          paint: {
+            "fill-color": "#22c55e",
+            "fill-opacity": 0.04
+          }
+        });
+      }
+
       if (!map.getLayer(PARCEL_LINE_LAYER_ID)) {
         map.addLayer({
           id: PARCEL_LINE_LAYER_ID,
@@ -141,7 +161,7 @@ export default function MapView({ onMapReady }: Props) {
           source: PARCEL_SOURCE_ID,
           paint: {
             "line-color": "#22c55e",
-            "line-width": 1.2,
+            "line-width": 1.1,
             "line-opacity": 0.9
           }
         });
@@ -172,6 +192,18 @@ export default function MapView({ onMapReady }: Props) {
 
     map.on("moveend", () => {
       void refreshParcels();
+    });
+
+    map.on("click", (e) => {
+      const features = map.queryRenderedFeatures(e.point, { layers: [PARCEL_FILL_LAYER_ID] });
+      const feat = features[0];
+      if (!feat?.properties) return;
+      setSelectedParcel(normalizeParcelProps(feat.properties as Record<string, unknown>));
+    });
+
+    map.on("mousemove", (e) => {
+      const hasFeature = map.queryRenderedFeatures(e.point, { layers: [PARCEL_FILL_LAYER_ID] }).length > 0;
+      map.getCanvas().style.cursor = hasFeature ? "pointer" : "";
     });
 
     map.on("load", () => {
@@ -300,6 +332,39 @@ export default function MapView({ onMapReady }: Props) {
           Hybrid
         </button>
       </div>
+
+      {selectedParcel ? (
+        <div className="parcel-sheet">
+          <div className="parcel-sheet-row">
+            <div>
+              <div className="parcel-sheet-eyebrow">Selected Parcel</div>
+              <div className="parcel-sheet-title">{selectedParcel.apn || "Parcel"}</div>
+            </div>
+            <button className="parcel-sheet-close" onClick={() => setSelectedParcel(null)}>
+              Close
+            </button>
+          </div>
+
+          <div className="parcel-grid">
+            <div>
+              <span>Owner</span>
+              <strong>{selectedParcel.owner_name || "—"}</strong>
+            </div>
+            <div>
+              <span>Acreage</span>
+              <strong>{typeof selectedParcel.acreage === "number" && !Number.isNaN(selectedParcel.acreage) ? selectedParcel.acreage.toFixed(2) : "—"}</strong>
+            </div>
+            <div>
+              <span>County</span>
+              <strong>{selectedParcel.county || "—"}</strong>
+            </div>
+            <div>
+              <span>State</span>
+              <strong>{selectedParcel.state || "—"}</strong>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
