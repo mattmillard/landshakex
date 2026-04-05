@@ -116,6 +116,7 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
       mapRef.current = new window.google.maps.Map(mapContainerRef.current, {
         center: { lat: 39.8283, lng: -98.5795 },
         zoom: 4,
+        maxZoom: 19,
         mapTypeId: "satellite",
         mapTypeControl: false,
         streetViewControl: false,

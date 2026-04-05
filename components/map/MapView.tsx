@@ -86,7 +86,8 @@ export default function MapView({ onMapReady }: Props) {
       container: mapContainerRef.current,
       style: SATELLITE_STYLE as unknown as maplibregl.StyleSpecification,
       center: CENTER,
-      zoom: 3.6
+      zoom: 3.6,
+      maxZoom: 19
     });
 
     map.addControl(new maplibregl.NavigationControl(), "top-right");

@@ -1,0 +1,7 @@
+{
+  "source": "data/raw/callaway_mo/callaway_parcels.geojson",
+  "output": "data/processed/callaway_mo/callaway_parcels_for_supabase.ndjson",
+  "feature_count": 25951,
+  "insertable_count": 25951,
+  "rejected_count": 0
+}
