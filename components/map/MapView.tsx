@@ -71,7 +71,7 @@ export default function MapView({ onMapReady }: Props) {
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const headingRef = useRef<number>(0);
   const watchIdRef = useRef<number | null>(null);
-  const [layer, setLayer] = useState<"streets" | "satellite" | "hybrid">("streets");
+  const [layer, setLayer] = useState<"streets" | "satellite" | "hybrid">("satellite");
   const targetRef = useRef<[number, number] | null>(null);
   const smoothingTimerRef = useRef<number | null>(null);
   const hasCenteredRef = useRef(false);
@@ -84,7 +84,7 @@ export default function MapView({ onMapReady }: Props) {
 
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
-      style: STREETS_STYLE,
+      style: SATELLITE_STYLE as unknown as maplibregl.StyleSpecification,
       center: CENTER,
       zoom: 3.6
     });

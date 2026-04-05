@@ -78,7 +78,7 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
   const [followUser, setFollowUser] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [zoom, setZoom] = useState(4);
-  const [mapTypeId, setMapTypeId] = useState<"roadmap" | "satellite" | "hybrid">("roadmap");
+  const [mapTypeId, setMapTypeId] = useState<"roadmap" | "satellite" | "hybrid">("satellite");
 
   useEffect(() => {
     let canceled = false;
@@ -109,7 +109,7 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
       mapRef.current = new window.google.maps.Map(mapContainerRef.current, {
         center: { lat: 39.8283, lng: -98.5795 },
         zoom: 4,
-        mapTypeId: "roadmap",
+        mapTypeId: "satellite",
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false
