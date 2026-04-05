@@ -1,0 +1,7 @@
+{
+  "source": "data/raw/boone_mo/boone_mo_parcels_geometry.geojson",
+  "output": "data/processed/boone_mo/boone_parcels_for_supabase.ndjson",
+  "feature_count": 73694,
+  "insertable_count": 73694,
+  "rejected_count": 0
+}

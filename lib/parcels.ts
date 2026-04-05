@@ -34,7 +34,7 @@ export async function getParcelsByBbox(
   const { data, error } = await supabaseAdmin
     .from("parcels")
     .select("id, apn, owner_name, acreage, county, state, geom")
-    .eq("source_dataset", "callaway-mo-20260405")
+    .in("source_dataset", ["callaway-mo-20260405", "boone-mo-20260405"])
     .filter("geom", "ov", bbox)
     .limit(limit);
 
