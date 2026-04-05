@@ -74,6 +74,7 @@ export default function MapView({ onMapReady }: Props) {
   const targetRef = useRef<[number, number] | null>(null);
   const smoothingTimerRef = useRef<number | null>(null);
   const hasCenteredRef = useRef(false);
+  const [followUser, setFollowUser] = useState(false);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -107,6 +108,7 @@ export default function MapView({ onMapReady }: Props) {
           if (!hasCenteredRef.current) {
             map.easeTo({ center: lngLat, zoom: Math.max(map.getZoom(), 15), duration: 900 });
             hasCenteredRef.current = true;
+            setFollowUser(false);
           }
         },
         () => undefined,
@@ -152,10 +154,12 @@ export default function MapView({ onMapReady }: Props) {
       const eased: [number, number] = [easedLng, easedLat];
       marker.setLngLat(eased);
 
-      const center = map.getCenter();
-      const centerLng = center.lng + (easedLng - center.lng) * 0.1;
-      const centerLat = center.lat + (easedLat - center.lat) * 0.1;
-      map.easeTo({ center: [centerLng, centerLat], duration: 250, essential: true });
+      if (followUser) {
+        const center = map.getCenter();
+        const centerLng = center.lng + (easedLng - center.lng) * 0.1;
+        const centerLat = center.lat + (easedLat - center.lat) * 0.1;
+        map.easeTo({ center: [centerLng, centerLat], duration: 250, essential: true });
+      }
     };
 
     smoothingTimerRef.current = window.setInterval(tick, 120);
@@ -165,7 +169,7 @@ export default function MapView({ onMapReady }: Props) {
         window.clearInterval(smoothingTimerRef.current);
       }
     };
-  }, []);
+  }, [followUser]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -184,6 +188,9 @@ export default function MapView({ onMapReady }: Props) {
     <>
       <div ref={mapContainerRef} className="map-wrap" />
       <div className="map-layer-picker">
+        <button className={followUser ? "active" : ""} onClick={() => setFollowUser((v) => !v)}>
+          {followUser ? "Following" : "Follow Me"}
+        </button>
         <button className={layer === "streets" ? "active" : ""} onClick={() => setLayer("streets")}>
           Streets
         </button>

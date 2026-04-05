@@ -48,6 +48,7 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
   const targetRef = useRef<google.maps.LatLngLiteral | null>(null);
   const smoothingTimerRef = useRef<number | null>(null);
   const hasCenteredRef = useRef(false);
+  const [followUser, setFollowUser] = useState(false);
   const [mapTypeId, setMapTypeId] = useState<"roadmap" | "satellite" | "hybrid">("roadmap");
 
   useEffect(() => {
@@ -93,6 +94,7 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
                 map.setZoom(15);
               }
               hasCenteredRef.current = true;
+              setFollowUser(false);
             }
           },
           () => undefined,
@@ -147,10 +149,12 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
       const center = map.getCenter();
       if (!center) return;
 
-      map.panTo({
-        lat: center.lat() + (eased.lat - center.lat()) * 0.12,
-        lng: center.lng() + (eased.lng - center.lng()) * 0.12
-      });
+      if (followUser) {
+        map.panTo({
+          lat: center.lat() + (eased.lat - center.lat()) * 0.12,
+          lng: center.lng() + (eased.lng - center.lng()) * 0.12
+        });
+      }
     };
 
     smoothingTimerRef.current = window.setInterval(tick, 120);
@@ -159,12 +163,15 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
         window.clearInterval(smoothingTimerRef.current);
       }
     };
-  }, []);
+  }, [followUser]);
 
   return (
     <>
       <div ref={mapContainerRef} className="map-wrap" />
       <div className="map-layer-picker">
+        <button className={followUser ? "active" : ""} onClick={() => setFollowUser((v) => !v)}>
+          {followUser ? "Following" : "Follow Me"}
+        </button>
         <button className={mapTypeId === "roadmap" ? "active" : ""} onClick={() => setMapTypeId("roadmap")}>
           Streets
         </button>
