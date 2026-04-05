@@ -174,13 +174,19 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
 
           if (geom.type === "Polygon") {
             const paths = geom.coordinates.map((ring) => ring.map(([lng, lat]) => ({ lat, lng })));
+            const cls = props as Record<string, unknown>;
+            const conservation = cls.conservation_class;
+            const strokeColor = conservation === "federal" ? "#60a5fa" : conservation === "state" ? "#fbbf24" : "#22c55e";
+            const fillColor = conservation === "federal" ? "#3b82f6" : conservation === "state" ? "#f59e0b" : "#22c55e";
+            const fillOpacity = conservation === "federal" ? 0.2 : conservation === "state" ? 0.14 : 0.04;
+
             const poly = new window.google!.maps.Polygon({
               paths,
-              strokeColor: "#22c55e",
+              strokeColor,
               strokeOpacity: 0.95,
               strokeWeight: 1,
-              fillColor: "#22c55e",
-              fillOpacity: 0.04,
+              fillColor,
+              fillOpacity,
               map
             });
             poly.addListener("click", () => setSelectedParcel(props));
@@ -188,13 +194,19 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
           } else if (geom.type === "MultiPolygon") {
             for (const polygon of geom.coordinates) {
               const paths = polygon.map((ring) => ring.map(([lng, lat]) => ({ lat, lng })));
+              const cls = props as Record<string, unknown>;
+              const conservation = cls.conservation_class;
+              const strokeColor = conservation === "federal" ? "#60a5fa" : conservation === "state" ? "#fbbf24" : "#22c55e";
+              const fillColor = conservation === "federal" ? "#3b82f6" : conservation === "state" ? "#f59e0b" : "#22c55e";
+              const fillOpacity = conservation === "federal" ? 0.2 : conservation === "state" ? 0.14 : 0.04;
+
               const poly = new window.google!.maps.Polygon({
                 paths,
-                strokeColor: "#22c55e",
+                strokeColor,
                 strokeOpacity: 0.95,
                 strokeWeight: 1,
-                fillColor: "#22c55e",
-                fillOpacity: 0.04,
+                fillColor,
+                fillOpacity,
                 map
               });
               poly.addListener("click", () => setSelectedParcel(props));

@@ -148,8 +148,22 @@ export default function MapView({ onMapReady }: Props) {
           type: "fill",
           source: PARCEL_SOURCE_ID,
           paint: {
-            "fill-color": "#22c55e",
-            "fill-opacity": 0.04
+            "fill-color": [
+              "case",
+              ["==", ["get", "conservation_class"], "federal"],
+              "#3b82f6",
+              ["==", ["get", "conservation_class"], "state"],
+              "#f59e0b",
+              "#22c55e"
+            ],
+            "fill-opacity": [
+              "case",
+              ["==", ["get", "conservation_class"], "federal"],
+              0.2,
+              ["==", ["get", "conservation_class"], "state"],
+              0.14,
+              0.04
+            ]
           }
         });
       }
@@ -160,9 +174,16 @@ export default function MapView({ onMapReady }: Props) {
           type: "line",
           source: PARCEL_SOURCE_ID,
           paint: {
-            "line-color": "#22c55e",
-            "line-width": 1.1,
-            "line-opacity": 0.9
+            "line-color": [
+              "case",
+              ["==", ["get", "conservation_class"], "federal"],
+              "#60a5fa",
+              ["==", ["get", "conservation_class"], "state"],
+              "#fbbf24",
+              "#22c55e"
+            ],
+            "line-width": 1.2,
+            "line-opacity": 0.95
           }
         });
       }
