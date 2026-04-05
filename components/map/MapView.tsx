@@ -69,6 +69,7 @@ export default function MapView({ onMapReady }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const headingRef = useRef<number>(0);
   const watchIdRef = useRef<number | null>(null);
   const [layer, setLayer] = useState<"streets" | "satellite" | "hybrid">("streets");
   const targetRef = useRef<[number, number] | null>(null);
@@ -90,6 +91,16 @@ export default function MapView({ onMapReady }: Props) {
 
     map.addControl(new maplibregl.NavigationControl(), "top-right");
 
+    const deviceOrientationHandler = (event: DeviceOrientationEvent) => {
+      if (typeof event.alpha === "number") {
+        headingRef.current = event.alpha;
+      }
+    };
+
+    if (typeof window !== "undefined" && "DeviceOrientationEvent" in window) {
+      window.addEventListener("deviceorientation", deviceOrientationHandler, true);
+    }
+
     map.on("zoom", () => {
       setZoom(Number(map.getZoom().toFixed(2)));
     });
@@ -108,7 +119,10 @@ export default function MapView({ onMapReady }: Props) {
           targetRef.current = lngLat;
 
           if (!markerRef.current) {
-            markerRef.current = new maplibregl.Marker({ color: "#22c55e" }).setLngLat(lngLat).addTo(map);
+            const el = document.createElement("div");
+            el.className = "user-pin";
+            el.innerHTML = '<div class="user-pin-pulse"></div><div class="user-pin-core"></div><div class="user-pin-heading"></div>';
+            markerRef.current = new maplibregl.Marker({ element: el }).setLngLat(lngLat).addTo(map);
           }
 
           if (!hasCenteredRef.current) {
@@ -129,6 +143,10 @@ export default function MapView({ onMapReady }: Props) {
     return () => {
       if (watchIdRef.current !== null && typeof navigator !== "undefined" && navigator.geolocation) {
         navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+
+      if (typeof window !== "undefined" && "DeviceOrientationEvent" in window) {
+        window.removeEventListener("deviceorientation", deviceOrientationHandler, true);
       }
 
       if (smoothingTimerRef.current !== null) {
@@ -159,6 +177,11 @@ export default function MapView({ onMapReady }: Props) {
       const easedLat = current.lat + (target[1] - current.lat) * 0.18;
       const eased: [number, number] = [easedLng, easedLat];
       marker.setLngLat(eased);
+
+      const headingEl = marker.getElement().querySelector(".user-pin-heading") as HTMLDivElement | null;
+      if (headingEl) {
+        headingEl.style.transform = `translate(-50%, -100%) rotate(${headingRef.current}deg)`;
+      }
 
       if (followUser) {
         const center = map.getCenter();

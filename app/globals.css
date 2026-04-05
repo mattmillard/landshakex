@@ -23,17 +23,6 @@ html, body {
   inset: 0;
 }
 
-.bottom-sheet {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(18, 26, 43, 0.95);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 12px 14px 16px;
-  backdrop-filter: blur(8px);
-}
-
 .map-layer-picker {
   position: fixed;
   top: 14px;
@@ -79,4 +68,64 @@ html, body {
   line-height: 1.5;
   color: #e5e7eb;
   backdrop-filter: blur(8px);
+}
+
+.user-pin {
+  position: relative;
+  width: 34px;
+  height: 34px;
+}
+
+.user-pin-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #22c55e;
+  border: 2px solid #04130a;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+}
+
+.user-pin-pulse {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 2px solid rgba(34, 197, 94, 0.35);
+  transform: translate(-50%, -50%);
+  animation: user-pulse 1.8s ease-out infinite;
+}
+
+.user-pin-heading {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 11px solid rgba(34, 197, 94, 0.9);
+  transform-origin: 50% 100%;
+  transform: translate(-50%, -100%);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+}
+
+@keyframes user-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.75);
+    opacity: 0.9;
+  }
+  70% {
+    transform: translate(-50%, -50%) scale(1.25);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.25);
+    opacity: 0;
+  }
 }
