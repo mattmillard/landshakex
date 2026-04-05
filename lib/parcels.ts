@@ -28,13 +28,15 @@ export async function getParcelsByBbox(
   limit: number
 ) {
   const supabaseAdmin = getSupabaseAdmin();
-  const { data, error } = await supabaseAdmin.rpc("get_parcels_by_bbox", {
-    p_min_lng: minLng,
-    p_min_lat: minLat,
-    p_max_lng: maxLng,
-    p_max_lat: maxLat,
-    p_limit: limit
-  });
+
+  const bbox = `SRID=4326;POLYGON((${minLng} ${minLat},${maxLng} ${minLat},${maxLng} ${maxLat},${minLng} ${maxLat},${minLng} ${minLat}))`;
+
+  const { data, error } = await supabaseAdmin
+    .from("parcels")
+    .select("id, apn, owner_name, acreage, county, state, geom")
+    .eq("source_dataset", "callaway-mo-20260405")
+    .filter("geom", "ov", bbox)
+    .limit(limit);
 
   if (error) throw error;
   return data ?? [];

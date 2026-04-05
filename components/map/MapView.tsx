@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 
 const CENTER: [number, number] = [-98.5795, 39.8283];
+const PARCEL_SOURCE_ID = "parcels";
+const PARCEL_LINE_LAYER_ID = "parcels-line";
 
 const STREETS_STYLE = "https://demotiles.maplibre.org/style.json";
 const SATELLITE_STYLE = {
@@ -65,19 +67,36 @@ type Props = {
   onMapReady?: () => void;
 };
 
+async function fetchParcelFeatureCollection(bounds: maplibregl.LngLatBounds): Promise<GeoJSON.FeatureCollection | null> {
+  const params = new URLSearchParams({
+    minLng: String(bounds.getWest()),
+    minLat: String(bounds.getSouth()),
+    maxLng: String(bounds.getEast()),
+    maxLat: String(bounds.getNorth()),
+    limit: "5000"
+  });
+
+  const res = await fetch(`/api/parcels/bbox?${params.toString()}`);
+  if (!res.ok) return null;
+  const payload = await res.json();
+  const fc = payload?.featureCollection;
+  if (!fc || !Array.isArray(fc.features)) return null;
+  return fc as GeoJSON.FeatureCollection;
+}
+
 export default function MapView({ onMapReady }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const headingRef = useRef<number>(0);
   const watchIdRef = useRef<number | null>(null);
+  const parcelFetchPendingRef = useRef(false);
+
   const [layer, setLayer] = useState<"streets" | "satellite" | "hybrid">("satellite");
   const targetRef = useRef<[number, number] | null>(null);
   const smoothingTimerRef = useRef<number | null>(null);
   const hasCenteredRef = useRef(false);
   const [followUser, setFollowUser] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
-  const [zoom, setZoom] = useState(3.6);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -107,12 +126,58 @@ export default function MapView({ onMapReady }: Props) {
       window.addEventListener("deviceorientation", deviceOrientationHandler, true);
     }
 
-    map.on("zoom", () => {
-      setZoom(Number(map.getZoom().toFixed(2)));
+    const ensureParcelLayer = () => {
+      if (!map.getSource(PARCEL_SOURCE_ID)) {
+        map.addSource(PARCEL_SOURCE_ID, {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] }
+        });
+      }
+
+      if (!map.getLayer(PARCEL_LINE_LAYER_ID)) {
+        map.addLayer({
+          id: PARCEL_LINE_LAYER_ID,
+          type: "line",
+          source: PARCEL_SOURCE_ID,
+          paint: {
+            "line-color": "#22c55e",
+            "line-width": 1.2,
+            "line-opacity": 0.9
+          }
+        });
+      }
+    };
+
+    const refreshParcels = async () => {
+      if (parcelFetchPendingRef.current) return;
+      const source = map.getSource(PARCEL_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+      if (!source) return;
+
+      parcelFetchPendingRef.current = true;
+      try {
+        const bounds = map.getBounds();
+        const fc = await fetchParcelFeatureCollection(bounds);
+        if (fc) source.setData(fc);
+      } catch {
+        // no-op
+      } finally {
+        parcelFetchPendingRef.current = false;
+      }
+    };
+
+    map.on("style.load", () => {
+      ensureParcelLayer();
+      void refreshParcels();
+    });
+
+    map.on("moveend", () => {
+      void refreshParcels();
     });
 
     map.on("load", () => {
       onMapReady?.();
+      ensureParcelLayer();
+      void refreshParcels();
     });
 
     mapRef.current = map;
@@ -121,7 +186,6 @@ export default function MapView({ onMapReady }: Props) {
       watchIdRef.current = navigator.geolocation.watchPosition(
         ({ coords }) => {
           const lngLat: [number, number] = [coords.longitude, coords.latitude];
-
           targetRef.current = lngLat;
 
           if (!markerRef.current) {
@@ -226,9 +290,6 @@ export default function MapView({ onMapReady }: Props) {
         <button className={followUser ? "active" : ""} onClick={() => setFollowUser((v) => !v)}>
           {followUser ? "Following" : "Follow Me"}
         </button>
-        <button className={showDebug ? "active" : ""} onClick={() => setShowDebug((v) => !v)}>
-          Debug
-        </button>
         <button className={layer === "streets" ? "active" : ""} onClick={() => setLayer("streets")}>
           Streets
         </button>
@@ -239,14 +300,6 @@ export default function MapView({ onMapReady }: Props) {
           Hybrid
         </button>
       </div>
-      {showDebug ? (
-        <div className="map-debug-panel">
-          <strong>Debug</strong>
-          <div>Zoom: {zoom}</div>
-          <div>Follow: {followUser ? "on" : "off"}</div>
-          <div>Layer: {layer}</div>
-        </div>
-      ) : null}
     </>
   );
 }
