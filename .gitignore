@@ -2,3 +2,7 @@ apps/web/node_modules/
 apps/web/.next/
 *.tsbuildinfo
 .DS_Store
+
+# local backups and large data exports
+backups/
+data/

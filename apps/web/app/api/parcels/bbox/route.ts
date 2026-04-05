@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { bboxQuerySchema } from "@/lib/validation";
-import { MOCK_PARCELS } from "@/lib/mock/parcels";
+import { getParcelsByBbox } from "@/lib/parcels";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -19,11 +19,25 @@ export async function GET(request: Request) {
     );
   }
 
-  // TODO: Replace with PostGIS bbox intersection query and GeoJSON serialization.
-  return NextResponse.json({
-    query: parsed.data,
-    count: MOCK_PARCELS.length,
-    parcels: MOCK_PARCELS,
-    source: "mock"
-  });
+  try {
+    const parcels = await getParcelsByBbox(
+      parsed.data.minLng,
+      parsed.data.minLat,
+      parsed.data.maxLng,
+      parsed.data.maxLat,
+      parsed.data.limit
+    );
+
+    return NextResponse.json({
+      query: parsed.data,
+      count: parcels.length,
+      parcels,
+      source: "supabase"
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Failed to query parcels by bbox", detail: String(error) },
+      { status: 500 }
+    );
+  }
 }

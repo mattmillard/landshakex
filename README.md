@@ -50,8 +50,13 @@ landshakex/
 ```
 
 ## Next actions
-1. Run migration `infra/supabase/migrations/0001_init.sql`
-2. Import your first local GeoJSON county dataset
-3. Scaffold Next.js app and connect map + bbox loading
-4. Implement tap-to-parcel card
+1. Run migrations:
+   - `infra/supabase/migrations/0001_init.sql`
+   - `infra/supabase/migrations/0002_parcels_rpc.sql`
+2. Set `apps/web/.env` from `apps/web/.env.example`
+3. Import your first county parcel dataset into `parcels`
+4. Verify API routes now query Supabase/PostGIS:
+   - `GET /api/parcels/point`
+   - `GET /api/parcels/bbox`
+   - `GET /api/parcels/:id`
 5. Add waypoint CRUD
