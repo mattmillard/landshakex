@@ -228,6 +228,24 @@ export default function MapView({ onMapReady }: Props) {
       const feat = features[0];
       if (!feat?.properties) return;
       setSelectedParcel(normalizeParcelProps(feat.properties as Record<string, unknown>));
+
+      // highlight selected feature
+      if (map.getLayer("parcels-selected")) {
+        map.removeLayer("parcels-selected");
+      }
+      if (map.getSource(PARCEL_SOURCE_ID)) {
+        map.addLayer({
+          id: "parcels-selected",
+          type: "line",
+          source: PARCEL_SOURCE_ID,
+          filter: ["==", ["get", "id"], Number(feat.properties.id)],
+          paint: {
+            "line-color": "#facc15",
+            "line-width": 2.2,
+            "line-opacity": 1
+          }
+        });
+      }
     });
 
     map.on("mousemove", (e) => {

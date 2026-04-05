@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import * as turf from "@turf/turf";
 import { bboxQuerySchema } from "@/lib/validation";
 import { getParcelsByBbox } from "@/lib/parcels";
 
@@ -35,12 +36,71 @@ function classifyConservation(parcel: RawParcel): "federal" | "state" | null {
     haystack.includes("STATE OF MISSOURI") ||
     haystack.includes("MISSOURI DEPARTMENT") ||
     haystack.includes("CONSERVATION COMMISSION") ||
-    haystack.includes("MDC")
+    haystack.includes("MDC") ||
+    haystack.includes("MISSOURI, ")
   ) {
     return "state";
   }
 
   return null;
+}
+
+function mergeConservationUnits(features: Feature[]): Feature[] {
+  const grouped = new Map<string, Feature[]>();
+
+  for (const f of features) {
+    const cls = (f.properties?.conservation_class as string | undefined) ?? null;
+    if (!cls) continue;
+
+    const owner = String(f.properties?.owner_name || "UNKNOWN").trim().toUpperCase();
+    const county = String(f.properties?.county || "");
+    const state = String(f.properties?.state || "");
+    const key = `${state}|${county}|${cls}|${owner}`;
+
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(f);
+  }
+
+  const merged: Feature[] = [];
+
+  for (const group of grouped.values()) {
+    if (!group.length) continue;
+
+    let acc = turf.feature(group[0].geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon) as GeoJSON.Feature<
+      GeoJSON.Polygon | GeoJSON.MultiPolygon
+    >;
+    for (let i = 1; i < group.length; i++) {
+      try {
+        const next = turf.feature(group[i].geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon) as GeoJSON.Feature<
+          GeoJSON.Polygon | GeoJSON.MultiPolygon
+        >;
+        const u = turf.union(turf.featureCollection([acc, next]));
+        if (u) acc = u as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>;
+      } catch {
+        // ignore invalid union step
+      }
+    }
+
+    const acres = group.reduce((s, g) => s + (Number(g.properties?.acreage) || 0), 0);
+    const parcelIds = group.map((g) => Number(g.properties?.id)).filter((n) => Number.isFinite(n));
+    const apns = group.map((g) => String(g.properties?.apn || "")).filter(Boolean);
+
+    merged.push({
+      type: "Feature",
+      geometry: acc.geometry as GeoJSON.Geometry,
+      properties: {
+        ...group[0].properties,
+        id: parcelIds[0] || group[0].properties?.id,
+        parcel_ids: parcelIds,
+        apns,
+        parcel_count: group.length,
+        acreage: Number(acres.toFixed(2)),
+        is_merged_unit: true
+      }
+    });
+  }
+
+  return merged;
 }
 
 export async function GET(request: Request) {
@@ -69,7 +129,7 @@ export async function GET(request: Request) {
       parsed.data.limit
     )) as RawParcel[];
 
-    const features: Feature[] = parcels
+    const baseFeatures: Feature[] = parcels
       .filter((p) => p.geom)
       .map((p) => ({
         type: "Feature",
@@ -84,9 +144,14 @@ export async function GET(request: Request) {
           apn: p.apn,
           apns: p.apn ? [p.apn] : [],
           parcel_ids: [p.id],
-          conservation_class: classifyConservation(p)
+          conservation_class: classifyConservation(p),
+          is_merged_unit: false
         }
       }));
+
+    const mergedConservation = mergeConservationUnits(baseFeatures);
+    const nonConservation = baseFeatures.filter((f) => !f.properties?.conservation_class);
+    const features = [...nonConservation, ...mergedConservation];
 
     return NextResponse.json({
       query: parsed.data,
