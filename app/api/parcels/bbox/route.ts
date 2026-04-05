@@ -73,8 +73,16 @@ export async function GET(request: Request) {
     const grouped = new Map<string, RawParcel[]>();
     for (const p of parcels) {
       if (!p.geom) continue;
-      const owner = (p.owner_name || "UNKNOWN").trim().toUpperCase();
-      const key = `${p.county || ""}|${p.state || ""}|${owner}`;
+
+      const ownerRaw = (p.owner_name || "").trim();
+      const owner = ownerRaw.length > 0 ? ownerRaw.toUpperCase() : null;
+      const apn = (p.apn || "").trim().toUpperCase();
+
+      // If owner is missing, do NOT aggregate all unknown parcels together.
+      // Keep each parcel isolated by APN (or id fallback) so county-level rendering doesn't collapse.
+      const identity = owner || (apn.length > 0 ? `APN:${apn}` : `ID:${p.id}`);
+      const key = `${p.county || ""}|${p.state || ""}|${identity}`;
+
       if (!grouped.has(key)) grouped.set(key, []);
       grouped.get(key)!.push(p);
     }
