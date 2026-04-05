@@ -64,3 +64,19 @@ html, body {
   border-color: #22c55e;
   font-weight: 700;
 }
+
+.map-debug-panel {
+  position: fixed;
+  top: 74px;
+  left: 14px;
+  z-index: 20;
+  min-width: 170px;
+  background: rgba(12, 18, 30, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #e5e7eb;
+  backdrop-filter: blur(8px);
+}

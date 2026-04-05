@@ -75,6 +75,8 @@ export default function MapView({ onMapReady }: Props) {
   const smoothingTimerRef = useRef<number | null>(null);
   const hasCenteredRef = useRef(false);
   const [followUser, setFollowUser] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [zoom, setZoom] = useState(3.6);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -87,6 +89,10 @@ export default function MapView({ onMapReady }: Props) {
     });
 
     map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+    map.on("zoom", () => {
+      setZoom(Number(map.getZoom().toFixed(2)));
+    });
 
     map.on("load", () => {
       onMapReady?.();
@@ -106,7 +112,7 @@ export default function MapView({ onMapReady }: Props) {
           }
 
           if (!hasCenteredRef.current) {
-            map.easeTo({ center: lngLat, zoom: Math.max(map.getZoom(), 15), duration: 900 });
+            map.easeTo({ center: lngLat, zoom: 14, duration: 900 });
             hasCenteredRef.current = true;
             setFollowUser(false);
           }
@@ -191,6 +197,9 @@ export default function MapView({ onMapReady }: Props) {
         <button className={followUser ? "active" : ""} onClick={() => setFollowUser((v) => !v)}>
           {followUser ? "Following" : "Follow Me"}
         </button>
+        <button className={showDebug ? "active" : ""} onClick={() => setShowDebug((v) => !v)}>
+          Debug
+        </button>
         <button className={layer === "streets" ? "active" : ""} onClick={() => setLayer("streets")}>
           Streets
         </button>
@@ -201,6 +210,14 @@ export default function MapView({ onMapReady }: Props) {
           Hybrid
         </button>
       </div>
+      {showDebug ? (
+        <div className="map-debug-panel">
+          <strong>Debug</strong>
+          <div>Zoom: {zoom}</div>
+          <div>Follow: {followUser ? "on" : "off"}</div>
+          <div>Layer: {layer}</div>
+        </div>
+      ) : null}
     </>
   );
 }

@@ -49,6 +49,8 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
   const smoothingTimerRef = useRef<number | null>(null);
   const hasCenteredRef = useRef(false);
   const [followUser, setFollowUser] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [zoom, setZoom] = useState(4);
   const [mapTypeId, setMapTypeId] = useState<"roadmap" | "satellite" | "hybrid">("roadmap");
 
   useEffect(() => {
@@ -67,6 +69,11 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false
+      });
+
+      mapRef.current.addListener("zoom_changed", () => {
+        const z = mapRef.current?.getZoom();
+        if (typeof z === "number") setZoom(Number(z.toFixed(2)));
       });
 
       onMapReady?.();
@@ -90,9 +97,7 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
 
             if (!hasCenteredRef.current) {
               map.panTo(pos);
-              if ((map.getZoom() ?? 4) < 15) {
-                map.setZoom(15);
-              }
+              map.setZoom(14);
               hasCenteredRef.current = true;
               setFollowUser(false);
             }
@@ -172,6 +177,9 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
         <button className={followUser ? "active" : ""} onClick={() => setFollowUser((v) => !v)}>
           {followUser ? "Following" : "Follow Me"}
         </button>
+        <button className={showDebug ? "active" : ""} onClick={() => setShowDebug((v) => !v)}>
+          Debug
+        </button>
         <button className={mapTypeId === "roadmap" ? "active" : ""} onClick={() => setMapTypeId("roadmap")}>
           Streets
         </button>
@@ -182,6 +190,14 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
           Hybrid
         </button>
       </div>
+      {showDebug ? (
+        <div className="map-debug-panel">
+          <strong>Debug</strong>
+          <div>Zoom: {zoom}</div>
+          <div>Follow: {followUser ? "on" : "off"}</div>
+          <div>Layer: {mapTypeId}</div>
+        </div>
+      ) : null}
     </>
   );
 }
