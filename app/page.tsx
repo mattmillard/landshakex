@@ -10,11 +10,7 @@ export default function HomePage() {
 
   return (
     <main>
-      {hasGoogleKey ? (
-        <GoogleMapView apiKey={env.googleMapsApiKey!} />
-      ) : (
-        <MapView />
-      )}
+      {hasGoogleKey ? <GoogleMapView apiKey={env.googleMapsApiKey!} /> : <MapView />}
 
       <section className="bottom-sheet" style={{ maxWidth: 720, margin: "0 auto", borderRadius: "12px 12px 0 0" }}>
         <p style={{ margin: 0, fontSize: 12, letterSpacing: 1.1, textTransform: "uppercase", opacity: 0.75 }}>
@@ -22,9 +18,7 @@ export default function HomePage() {
         </p>
         <h2 style={{ margin: "8px 0 6px", fontSize: 20 }}>Live Parcel Map</h2>
         <p style={{ margin: 0, opacity: 0.9, fontSize: 14, lineHeight: 1.4 }}>
-          {hasGoogleKey
-            ? "Google Maps is active."
-            : "Using open-source MapLibre fallback. Set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to switch to Google Maps."}
+          Location tracking is on when permission is granted. Use Streets, Satellite, or Hybrid from the map.
         </p>
       </section>
     </main>

@@ -33,3 +33,34 @@ html, body {
   padding: 12px 14px 16px;
   backdrop-filter: blur(8px);
 }
+
+.map-layer-picker {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 20;
+  display: flex;
+  gap: 8px;
+  background: rgba(12, 18, 30, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  padding: 6px;
+  backdrop-filter: blur(8px);
+}
+
+.map-layer-picker button {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e5e7eb;
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.map-layer-picker button.active {
+  background: #22c55e;
+  color: #04130a;
+  border-color: #22c55e;
+  font-weight: 700;
+}
