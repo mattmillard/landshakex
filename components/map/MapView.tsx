@@ -5,11 +5,61 @@ import maplibregl from "maplibre-gl";
 
 const CENTER: [number, number] = [-98.5795, 39.8283];
 
-const MAPLIBRE_STYLES: Record<"streets" | "satellite" | "hybrid", string> = {
-  streets: "https://demotiles.maplibre.org/style.json",
-  satellite: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
-  hybrid: "https://demotiles.maplibre.org/style.json"
-};
+const STREETS_STYLE = "https://demotiles.maplibre.org/style.json";
+const SATELLITE_STYLE = {
+  version: 8,
+  sources: {
+    satellite: {
+      type: "raster",
+      tiles: [
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+      ],
+      tileSize: 256,
+      attribution: "Tiles © Esri"
+    }
+  },
+  layers: [
+    {
+      id: "satellite",
+      type: "raster",
+      source: "satellite"
+    }
+  ]
+} as const;
+
+const HYBRID_STYLE = {
+  version: 8,
+  sources: {
+    satellite: {
+      type: "raster",
+      tiles: [
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+      ],
+      tileSize: 256,
+      attribution: "Tiles © Esri"
+    },
+    labels: {
+      type: "raster",
+      tiles: [
+        "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+      ],
+      tileSize: 256,
+      attribution: "Labels © Esri"
+    }
+  },
+  layers: [
+    {
+      id: "satellite",
+      type: "raster",
+      source: "satellite"
+    },
+    {
+      id: "labels",
+      type: "raster",
+      source: "labels"
+    }
+  ]
+} as const;
 
 type Props = {
   onMapReady?: () => void;
@@ -21,13 +71,16 @@ export default function MapView({ onMapReady }: Props) {
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const [layer, setLayer] = useState<"streets" | "satellite" | "hybrid">("streets");
+  const targetRef = useRef<[number, number] | null>(null);
+  const smoothingTimerRef = useRef<number | null>(null);
+  const hasCenteredRef = useRef(false);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
-      style: MAPLIBRE_STYLES[layer],
+      style: STREETS_STYLE,
       center: CENTER,
       zoom: 3.6
     });
@@ -45,13 +98,16 @@ export default function MapView({ onMapReady }: Props) {
         ({ coords }) => {
           const lngLat: [number, number] = [coords.longitude, coords.latitude];
 
+          targetRef.current = lngLat;
+
           if (!markerRef.current) {
             markerRef.current = new maplibregl.Marker({ color: "#22c55e" }).setLngLat(lngLat).addTo(map);
-          } else {
-            markerRef.current.setLngLat(lngLat);
           }
 
-          map.easeTo({ center: lngLat, zoom: Math.max(map.getZoom(), 14), duration: 700 });
+          if (!hasCenteredRef.current) {
+            map.easeTo({ center: lngLat, zoom: Math.max(map.getZoom(), 15), duration: 900 });
+            hasCenteredRef.current = true;
+          }
         },
         () => undefined,
         {
@@ -65,6 +121,10 @@ export default function MapView({ onMapReady }: Props) {
     return () => {
       if (watchIdRef.current !== null && typeof navigator !== "undefined" && navigator.geolocation) {
         navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+
+      if (smoothingTimerRef.current !== null) {
+        window.clearInterval(smoothingTimerRef.current);
       }
 
       if (markerRef.current) {
@@ -81,7 +141,43 @@ export default function MapView({ onMapReady }: Props) {
     const map = mapRef.current;
     if (!map) return;
 
-    map.setStyle(MAPLIBRE_STYLES[layer]);
+    const tick = () => {
+      const target = targetRef.current;
+      const marker = markerRef.current;
+      if (!target || !marker) return;
+
+      const current = marker.getLngLat();
+      const easedLng = current.lng + (target[0] - current.lng) * 0.18;
+      const easedLat = current.lat + (target[1] - current.lat) * 0.18;
+      const eased: [number, number] = [easedLng, easedLat];
+      marker.setLngLat(eased);
+
+      const center = map.getCenter();
+      const centerLng = center.lng + (easedLng - center.lng) * 0.1;
+      const centerLat = center.lat + (easedLat - center.lat) * 0.1;
+      map.easeTo({ center: [centerLng, centerLat], duration: 250, essential: true });
+    };
+
+    smoothingTimerRef.current = window.setInterval(tick, 120);
+
+    return () => {
+      if (smoothingTimerRef.current !== null) {
+        window.clearInterval(smoothingTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (layer === "streets") {
+      map.setStyle(STREETS_STYLE);
+    } else if (layer === "satellite") {
+      map.setStyle(SATELLITE_STYLE as unknown as maplibregl.StyleSpecification);
+    } else {
+      map.setStyle(HYBRID_STYLE as unknown as maplibregl.StyleSpecification);
+    }
   }, [layer]);
 
   return (

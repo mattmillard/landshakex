@@ -43,8 +43,11 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
 export default function GoogleMapView({ apiKey, onMapReady }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
-  const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | google.maps.Marker | null>(null);
+  const markerRef = useRef<google.maps.Marker | null>(null);
   const watchIdRef = useRef<number | null>(null);
+  const targetRef = useRef<google.maps.LatLngLiteral | null>(null);
+  const smoothingTimerRef = useRef<number | null>(null);
+  const hasCenteredRef = useRef(false);
   const [mapTypeId, setMapTypeId] = useState<"roadmap" | "satellite" | "hybrid">("roadmap");
 
   useEffect(() => {
@@ -74,19 +77,22 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
             const map = mapRef.current;
             if (!map) return;
 
+            targetRef.current = pos;
+
             if (!markerRef.current) {
               markerRef.current = new window.google!.maps.Marker({
                 position: pos,
                 map,
                 title: "You"
               });
-            } else if ("setPosition" in markerRef.current) {
-              markerRef.current.setPosition(pos);
             }
 
-            map.panTo(pos);
-            if ((map.getZoom() ?? 4) < 14) {
-              map.setZoom(14);
+            if (!hasCenteredRef.current) {
+              map.panTo(pos);
+              if ((map.getZoom() ?? 4) < 15) {
+                map.setZoom(15);
+              }
+              hasCenteredRef.current = true;
             }
           },
           () => undefined,
@@ -106,6 +112,9 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
       if (watchIdRef.current !== null && navigator.geolocation) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
+      if (smoothingTimerRef.current !== null) {
+        window.clearInterval(smoothingTimerRef.current);
+      }
       markerRef.current = null;
       mapRef.current = null;
     };
@@ -116,6 +125,41 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
     if (!map) return;
     map.setMapTypeId(mapTypeId);
   }, [mapTypeId]);
+
+  useEffect(() => {
+    const tick = () => {
+      const map = mapRef.current;
+      const marker = markerRef.current;
+      const target = targetRef.current;
+      if (!map || !marker || !target) return;
+
+      const currentPos = marker.getPosition();
+      if (!currentPos) return;
+
+      const current = { lat: currentPos.lat(), lng: currentPos.lng() };
+      const eased = {
+        lat: current.lat + (target.lat - current.lat) * 0.2,
+        lng: current.lng + (target.lng - current.lng) * 0.2
+      };
+
+      marker.setPosition(eased);
+
+      const center = map.getCenter();
+      if (!center) return;
+
+      map.panTo({
+        lat: center.lat() + (eased.lat - center.lat()) * 0.12,
+        lng: center.lng() + (eased.lng - center.lng()) * 0.12
+      });
+    };
+
+    smoothingTimerRef.current = window.setInterval(tick, 120);
+    return () => {
+      if (smoothingTimerRef.current !== null) {
+        window.clearInterval(smoothingTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <>
