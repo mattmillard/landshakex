@@ -8,7 +8,7 @@ const PARCEL_SOURCE_ID = "parcels";
 const PARCEL_FILL_LAYER_ID = "parcels-fill";
 const PARCEL_LINE_LAYER_ID = "parcels-line";
 
-const STREETS_STYLE = "https://demotiles.maplibre.org/style.json";
+const STREETS_STYLE = "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json";
 const SATELLITE_STYLE = {
   version: 8,
   sources: {
