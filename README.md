@@ -33,7 +33,7 @@ This app requires geospatial polygon/point queries, parcel intersections, viewpo
 - `POST /api/shares`
 
 ## Repository layout (Vercel auto-detect)
-This repo is now a **root-level Next.js app** so Vercel can detect it automatically on GitHub import.
+This repo is a **root-level Next.js app** so Vercel can detect it automatically on GitHub import.
 
 ```txt
 landshakex/
@@ -49,6 +49,8 @@ landshakex/
   infra/
   docs/
 ```
+
+Legacy nested app folders were removed to keep deployment unambiguous.
 
 ## Deployment (Vercel)
 - Import repo from GitHub
