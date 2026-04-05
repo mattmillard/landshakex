@@ -190,6 +190,12 @@ export default function MapView({ onMapReady }: Props) {
     };
 
     const refreshParcels = async () => {
+      if (map.getZoom() < 13) {
+        const source = map.getSource(PARCEL_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+        if (source) source.setData({ type: "FeatureCollection", features: [] });
+        return;
+      }
+
       if (parcelFetchPendingRef.current) return;
       const source = map.getSource(PARCEL_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
       if (!source) return;

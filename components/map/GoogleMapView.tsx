@@ -146,6 +146,12 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
       const map = mapRef.current;
 
       const renderParcels = async () => {
+        if ((map.getZoom() ?? 0) < 13) {
+          parcelPolygonsRef.current.forEach((p) => p.setMap(null));
+          parcelPolygonsRef.current = [];
+          return;
+        }
+
         const bounds = map.getBounds();
         if (!bounds) return;
 
@@ -161,10 +167,11 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
         if (!res.ok) return;
         const payload = await res.json();
         const features = payload?.featureCollection?.features as Array<{ properties?: Record<string, unknown>; geometry?: GeoJSON.Geometry }> | undefined;
-        if (!features || features.length === 0) return;
 
         parcelPolygonsRef.current.forEach((p) => p.setMap(null));
         parcelPolygonsRef.current = [];
+
+        if (!features || features.length === 0) return;
 
         for (const feature of features) {
           const geom = feature.geometry;
