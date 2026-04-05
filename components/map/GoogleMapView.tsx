@@ -90,14 +90,21 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
       if (canceled || !mapContainerRef.current || !window.google?.maps) return;
 
       const deviceOrientationHandler = (event: DeviceOrientationEvent) => {
-        if (typeof event.alpha === "number") {
-          headingRef.current = event.alpha;
+        const anyEvent = event as DeviceOrientationEvent & { webkitCompassHeading?: number };
+        const hasWebkitHeading = typeof anyEvent.webkitCompassHeading === "number";
 
-          if (headingElRef.current) {
-            headingElRef.current.style.transform = `translate(-50%, -100%) rotate(${headingRef.current}deg)`;
-          } else if (markerRef.current && "setIcon" in markerRef.current) {
-            markerRef.current.setIcon(createUserIcon(headingRef.current));
-          }
+        if (hasWebkitHeading) {
+          headingRef.current = anyEvent.webkitCompassHeading as number;
+        } else if (typeof event.alpha === "number") {
+          headingRef.current = (360 - event.alpha + 360) % 360;
+        } else {
+          return;
+        }
+
+        if (headingElRef.current) {
+          headingElRef.current.style.transform = `translate(-50%, calc(-100% - 1px)) rotate(${headingRef.current}deg)`;
+        } else if (markerRef.current && "setIcon" in markerRef.current) {
+          markerRef.current.setIcon(createUserIcon(headingRef.current));
         }
       };
       orientationHandlerRef.current = deviceOrientationHandler;
@@ -137,7 +144,7 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
               if (markerLib?.AdvancedMarkerElement) {
                 const { wrapper, headingEl } = createUserPinElement();
                 headingElRef.current = headingEl;
-                headingEl.style.transform = `translate(-50%, -100%) rotate(${headingRef.current}deg)`;
+                headingEl.style.transform = `translate(-50%, calc(-100% - 1px)) rotate(${headingRef.current}deg)`;
 
                 markerRef.current = new markerLib.AdvancedMarkerElement({
                   map,
@@ -236,7 +243,7 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
       }
 
       if (headingElRef.current) {
-        headingElRef.current.style.transform = `translate(-50%, -100%) rotate(${headingRef.current}deg)`;
+        headingElRef.current.style.transform = `translate(-50%, calc(-100% - 1px)) rotate(${headingRef.current}deg)`;
       }
 
       if (followUser) {

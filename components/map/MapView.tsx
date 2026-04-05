@@ -92,8 +92,13 @@ export default function MapView({ onMapReady }: Props) {
     map.addControl(new maplibregl.NavigationControl(), "top-right");
 
     const deviceOrientationHandler = (event: DeviceOrientationEvent) => {
-      if (typeof event.alpha === "number") {
-        headingRef.current = event.alpha;
+      const anyEvent = event as DeviceOrientationEvent & { webkitCompassHeading?: number };
+      const hasWebkitHeading = typeof anyEvent.webkitCompassHeading === "number";
+
+      if (hasWebkitHeading) {
+        headingRef.current = anyEvent.webkitCompassHeading as number;
+      } else if (typeof event.alpha === "number") {
+        headingRef.current = (360 - event.alpha + 360) % 360;
       }
     };
 
@@ -180,7 +185,7 @@ export default function MapView({ onMapReady }: Props) {
 
       const headingEl = marker.getElement().querySelector(".user-pin-heading") as HTMLDivElement | null;
       if (headingEl) {
-        headingEl.style.transform = `translate(-50%, -100%) rotate(${headingRef.current}deg)`;
+        headingEl.style.transform = `translate(-50%, calc(-100% - 1px)) rotate(${headingRef.current}deg)`;
       }
 
       if (followUser) {
