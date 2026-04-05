@@ -149,6 +149,7 @@ export default function GoogleMapView({ apiKey, onMapReady }: Props) {
         if ((map.getZoom() ?? 0) < 13) {
           parcelPolygonsRef.current.forEach((p) => p.setMap(null));
           parcelPolygonsRef.current = [];
+          setSelectedParcel(null);
           return;
         }
 

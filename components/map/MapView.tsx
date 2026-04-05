@@ -147,6 +147,7 @@ export default function MapView({ onMapReady }: Props) {
           id: PARCEL_FILL_LAYER_ID,
           type: "fill",
           source: PARCEL_SOURCE_ID,
+          minzoom: 13,
           paint: {
             "fill-color": [
               "case",
@@ -173,6 +174,7 @@ export default function MapView({ onMapReady }: Props) {
           id: PARCEL_LINE_LAYER_ID,
           type: "line",
           source: PARCEL_SOURCE_ID,
+          minzoom: 13,
           paint: {
             "line-color": [
               "case",
