@@ -71,9 +71,11 @@ export default function MapView({ onMapReady }: Props) {
   const mapRef = useRef<import("leaflet").Map | null>(null);
   const parcelLayerRef = useRef<import("leaflet").GeoJSON | null>(null);
   const conservationLayerRef = useRef<import("leaflet").GeoJSON | null>(null);
-  const osmLayerRef = useRef<import("leaflet").TileLayer | null>(null);
+  const streetLayerRef = useRef<import("leaflet").TileLayer | null>(null);
+  const satelliteLayerRef = useRef<import("leaflet").TileLayer | null>(null);
+  const labelsLayerRef = useRef<import("leaflet").TileLayer | null>(null);
 
-  const [layer, setLayer] = useState<"osm">("osm");
+  const [layer, setLayer] = useState<"streets" | "satellite" | "hybrid">("satellite");
   const [followUser, setFollowUser] = useState(false);
   const [selectedParcel, setSelectedParcel] = useState<ParcelFeatureProps | null>(null);
 
@@ -97,12 +99,20 @@ export default function MapView({ onMapReady }: Props) {
       const map = L.map(mapContainerRef.current, { zoomControl: false }).setView(CENTER, 4);
       L.control.zoom({ position: "topright" }).addTo(map);
 
-      osmLayerRef.current = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      streetLayerRef.current = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 20,
         attribution: "&copy; OpenStreetMap contributors"
       });
+      satelliteLayerRef.current = L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        { maxZoom: 20, attribution: "Tiles &copy; Esri" }
+      );
+      labelsLayerRef.current = L.tileLayer(
+        "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+        { maxZoom: 20, attribution: "Labels &copy; Esri" }
+      );
 
-      osmLayerRef.current.addTo(map);
+      satelliteLayerRef.current.addTo(map);
 
       const clearLayer = (r: React.MutableRefObject<import("leaflet").GeoJSON | null>) => {
         if (r.current) {
@@ -222,12 +232,21 @@ export default function MapView({ onMapReady }: Props) {
     const map = mapRef.current;
     if (!map) return;
 
-    const osm = osmLayerRef.current;
+    const streets = streetLayerRef.current;
+    const satellite = satelliteLayerRef.current;
+    const labels = labelsLayerRef.current;
 
-    if (osm) map.removeLayer(osm);
+    if (streets) map.removeLayer(streets);
+    if (satellite) map.removeLayer(satellite);
+    if (labels) map.removeLayer(labels);
 
-    if (layer === "osm") {
-      osm?.addTo(map);
+    if (layer === "streets") {
+      streets?.addTo(map);
+    } else if (layer === "satellite") {
+      satellite?.addTo(map);
+    } else {
+      satellite?.addTo(map);
+      labels?.addTo(map);
     }
   }, [layer]);
 
@@ -263,11 +282,14 @@ export default function MapView({ onMapReady }: Props) {
     <>
       <div ref={mapContainerRef} className="map-wrap" />
       <div className="map-layer-picker">
-        <button className={followUser ? "active" : ""} onClick={() => setFollowUser((v) => !v)}>
-          {followUser ? "Following" : "Follow Me"}
+        <button className={layer === "streets" ? "active" : ""} onClick={() => setLayer("streets")}>
+          Street View
         </button>
-        <button className={layer === "osm" ? "active" : ""} onClick={() => setLayer("osm")}>
-          OpenStreetMap
+        <button className={layer === "satellite" ? "active" : ""} onClick={() => setLayer("satellite")}>
+          Satellite
+        </button>
+        <button className={layer === "hybrid" ? "active" : ""} onClick={() => setLayer("hybrid")}>
+          Hybrid
         </button>
       </div>
 
