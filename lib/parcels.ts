@@ -25,13 +25,14 @@ export async function getParcelsByBbox(
   minLat: number,
   maxLng: number,
   maxLat: number,
-  limit: number
+  limit: number,
+  includeConservationOnly: boolean = false
 ) {
   const supabaseAdmin = getSupabaseAdmin();
 
   const bbox = `SRID=4326;POLYGON((${minLng} ${minLat},${maxLng} ${minLat},${maxLng} ${maxLat},${minLng} ${maxLat},${minLng} ${minLat}))`;
 
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("parcels")
     .select("id, apn, owner_name, acreage, county, state, geom")
     .in("source_dataset", [
@@ -42,6 +43,17 @@ export async function getParcelsByBbox(
     ])
     .filter("geom", "ov", bbox)
     .limit(limit);
+
+  if (includeConservationOnly) {
+    query = query.or(
+      "owner_name.ilike.*UNITED STATES*,owner_name.ilike.*U.S.*,owner_name.ilike.*US %," +
+        "owner_name.ilike.*USDA*,owner_name.ilike.*NATIONAL FOREST*,owner_name.ilike.*ARMY CORPS*," +
+        "owner_name.ilike.*STATE OF MISSOURI*,owner_name.ilike.*MISSOURI DEPARTMENT OF CONSERVATION*," +
+        "owner_name.ilike.*CONSERVATION COMMISSION*,owner_name.ilike.*DEPARTMENT OF NATURAL RESOURCES*"
+    );
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
   return data ?? [];

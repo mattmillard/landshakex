@@ -18,27 +18,41 @@ type Feature = GeoJSON.Feature<GeoJSON.Geometry, Record<string, unknown>>;
 
 function classifyConservation(parcel: RawParcel): "federal" | "state" | null {
   const owner = (parcel.owner_name || "").toUpperCase();
-  const apn = (parcel.apn || "").toUpperCase();
-  const haystack = `${owner} ${apn}`;
 
-  if (
-    haystack.includes("US ") ||
-    haystack.includes("U S ") ||
-    haystack.includes("UNITED STATES") ||
-    haystack.includes("USDA") ||
-    haystack.includes("CORPS") ||
-    haystack.includes("NATIONAL")
-  ) {
+  // Federal ownership and conservation patterns.
+  const federalNeedles = [
+    "UNITED STATES",
+    "U.S.",
+    " US ",
+    "USDA",
+    "U S A",
+    "US ARMY CORPS",
+    "CORPS OF ENGINEERS",
+    "NATIONAL FOREST",
+    "NATIONAL PARK",
+    "BUREAU OF LAND MANAGEMENT",
+    "FISH AND WILDLIFE",
+    "DEPARTMENT OF INTERIOR",
+    "DEPARTMENT OF AGRICULTURE"
+  ];
+
+  if (federalNeedles.some((n) => owner.includes(n))) {
     return "federal";
   }
 
-  if (
-    haystack.includes("STATE OF MISSOURI") ||
-    haystack.includes("MISSOURI DEPARTMENT") ||
-    haystack.includes("CONSERVATION COMMISSION") ||
-    haystack.includes("MDC") ||
-    haystack.includes("MISSOURI, ")
-  ) {
+  // State/public conservation patterns.
+  const stateNeedles = [
+    "STATE OF MISSOURI",
+    "MISSOURI DEPARTMENT OF CONSERVATION",
+    "CONSERVATION COMMISSION",
+    "MISSOURI DEPARTMENT OF NATURAL RESOURCES",
+    "MISSOURI DEPARTMENT OF TRANSPORTATION",
+    "MDC",
+    "MDNR",
+    "MISSOURI STATE"
+  ];
+
+  if (stateNeedles.some((n) => owner.includes(n))) {
     return "state";
   }
 
@@ -105,6 +119,8 @@ function mergeConservationUnits(features: Feature[]): Feature[] {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const conservationOnly = searchParams.get("conservationOnly") === "1";
+
   const parsed = bboxQuerySchema.safeParse({
     minLng: searchParams.get("minLng"),
     minLat: searchParams.get("minLat"),
@@ -126,7 +142,8 @@ export async function GET(request: Request) {
       parsed.data.minLat,
       parsed.data.maxLng,
       parsed.data.maxLat,
-      parsed.data.limit
+      parsed.data.limit,
+      conservationOnly
     )) as RawParcel[];
 
     const baseFeatures: Feature[] = parcels
@@ -151,7 +168,7 @@ export async function GET(request: Request) {
 
     const mergedConservation = mergeConservationUnits(baseFeatures);
     const nonConservation = baseFeatures.filter((f) => !f.properties?.conservation_class);
-    const features = [...nonConservation, ...mergedConservation];
+    const features = conservationOnly ? mergedConservation : [...nonConservation, ...mergedConservation];
 
     return NextResponse.json({
       query: parsed.data,
