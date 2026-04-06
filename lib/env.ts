@@ -4,7 +4,6 @@ function optionalEnv(name: string): string | null {
 }
 
 export const env = {
-  maptilerStyleUrl: process.env.NEXT_PUBLIC_MAP_STYLE_URL || "https://demotiles.maplibre.org/style.json",
   appName: "LandShakeX",
   supabaseUrl: optionalEnv("NEXT_PUBLIC_SUPABASE_URL"),
   supabaseAnonKey: optionalEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
