@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 
 const CENTER: [number, number] = [39.8283, -98.5795];
 const WAYPOINTS_STORAGE_KEY = "landshakex:waypoints:v3";
@@ -119,6 +120,8 @@ export default function MapView({ onMapReady }: Props) {
   const fetchPendingRef = useRef(false);
   const targetRef = useRef<[number, number] | null>(null);
 
+  const supabase = getSupabaseBrowserClient();
+
   const [layer, setLayer] = useState<"streets" | "satellite" | "hybrid">("satellite");
   const [selectedParcel, setSelectedParcel] = useState<ParcelFeatureProps | null>(null);
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
@@ -127,8 +130,39 @@ export default function MapView({ onMapReady }: Props) {
   const editingWaypoint = waypoints.find((w) => w.id === editingId) || null;
 
   const persistWaypoints = (next: Waypoint[]) => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(WAYPOINTS_STORAGE_KEY, JSON.stringify(next));
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(WAYPOINTS_STORAGE_KEY, JSON.stringify(next));
+    }
+
+    if (supabase) {
+      void (async () => {
+        try {
+          const { data: authData } = await supabase.auth.getUser();
+          const user = authData.user;
+          if (!user) return;
+
+          // Replace user's waypoint set in Supabase with current local set.
+          await (supabase as any).from("waypoints").delete().eq("user_id", user.id);
+
+          if (!next.length) return;
+
+          const rows = next.map((w) => ({
+            id: w.id,
+            user_id: user.id,
+            title: w.name,
+            notes: w.name,
+            icon: w.style.icon,
+            color: w.style.color,
+            category: "pin",
+            location: `POINT(${w.lng} ${w.lat})`
+          }));
+
+          await (supabase as any).from("waypoints").insert(rows);
+        } catch {
+          // ignore cloud write errors for now
+        }
+      })();
+    }
   };
 
   const updateWaypoint = (id: string, patch: Partial<Waypoint>) => {
@@ -284,10 +318,50 @@ export default function MapView({ onMapReady }: Props) {
           const raw = window.localStorage.getItem(WAYPOINTS_STORAGE_KEY);
           if (raw) {
             const parsed = JSON.parse(raw) as Waypoint[];
-            if (Array.isArray(parsed)) setWaypoints(parsed.filter((w) => Number.isFinite(w.lat) && Number.isFinite(w.lng)));
+            if (Array.isArray(parsed)) {
+              const filtered = parsed.filter((w) => Number.isFinite(w.lat) && Number.isFinite(w.lng));
+              setWaypoints(filtered);
+            }
           }
         } catch {
           // no-op
+        }
+      }
+
+      if (supabase) {
+        try {
+          const { data: authData } = await supabase.auth.getUser();
+          const user = authData.user;
+          if (user) {
+            const { data } = await (supabase as any)
+              .from("waypoints")
+              .select("id,title,notes,icon,color,location")
+              .eq("user_id", user.id)
+              .order("created_at", { ascending: true });
+
+            if (Array.isArray(data)) {
+              const cloud = data
+                .map((r: any) => {
+                  const m = String(r.location || "").match(/POINT\(([-0-9.]+)\s+([-0-9.]+)\)/i);
+                  if (!m) return null;
+                  return {
+                    id: String(r.id || newId()),
+                    lng: Number(m[1]),
+                    lat: Number(m[2]),
+                    name: r.notes || r.title || "Waypoint",
+                    style: { color: r.color || WAYPOINT_COLORS[0], icon: r.icon || WAYPOINT_ICONS[0] }
+                  } as Waypoint;
+                })
+                .filter(Boolean) as Waypoint[];
+
+              if (cloud.length) {
+                setWaypoints(cloud);
+                if (typeof window !== "undefined") window.localStorage.setItem(WAYPOINTS_STORAGE_KEY, JSON.stringify(cloud));
+              }
+            }
+          }
+        } catch {
+          // ignore cloud read errors
         }
       }
 

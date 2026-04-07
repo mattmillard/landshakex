@@ -11,6 +11,8 @@ export default function AuthPanel() {
   const [message, setMessage] = useState<string>("");
 
   useEffect(() => {
+    if (!supabase) return;
+
     supabase.auth.getUser().then(({ data }) => {
       setUserEmail(data.user?.email ?? null);
     });
@@ -26,25 +28,36 @@ export default function AuthPanel() {
 
   const signIn = async () => {
     setMessage("");
+    if (!supabase) {
+      setMessage("Auth not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+      return;
+    }
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) setMessage(error.message);
   };
 
   const signUp = async () => {
     setMessage("");
+    if (!supabase) {
+      setMessage("Auth not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+      return;
+    }
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) setMessage(error.message);
     else setMessage("Check email to confirm sign up.");
   };
 
   const signOut = async () => {
+    if (!supabase) return;
     await supabase.auth.signOut();
     setMessage("");
   };
 
   return (
     <div className="auth-panel">
-      {userEmail ? (
+      {!supabase ? (
+        <div className="auth-msg">Auth disabled: missing public Supabase env vars.</div>
+      ) : userEmail ? (
         <>
           <div className="auth-user">Signed in as {userEmail}</div>
           <button className="auth-btn" onClick={signOut}>Sign out</button>

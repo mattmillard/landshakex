@@ -5,8 +5,10 @@ let client: ReturnType<typeof createClient> | null = null;
 
 export function getSupabaseBrowserClient() {
   if (client) return client;
+
+  // Soft-disable auth-dependent UI if anon creds are missing.
   if (!env.supabaseUrl || !env.supabaseAnonKey) {
-    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL/NEXT_PUBLIC_SUPABASE_ANON_KEY");
+    return null;
   }
 
   client = createClient(env.supabaseUrl, env.supabaseAnonKey, {
