@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 
 const CENTER: [number, number] = [39.8283, -98.5795];
-const WAYPOINT_STORAGE_KEY = "landshakex:waypoint:v2";
+const WAYPOINTS_STORAGE_KEY = "landshakex:waypoints:v3";
 const LONG_PRESS_MS = 350;
 
 type Props = {
@@ -27,6 +26,7 @@ type WaypointStyle = {
 };
 
 type Waypoint = {
+  id: string;
   lat: number;
   lng: number;
   name: string;
@@ -35,6 +35,25 @@ type Waypoint = {
 
 const WAYPOINT_COLORS = ["#ff3b1a", "#f59e0b", "#10b981", "#3b82f6", "#a855f7"];
 const WAYPOINT_ICONS = ["✖", "🎯", "⛳", "🦃", "🗼", "＋"];
+
+function newId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function makeDefaultWaypoint(lat: number, lng: number): Waypoint {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    id: newId(),
+    lat,
+    lng,
+    name: `Waypoint ${pad(now.getHours())}:${pad(now.getMinutes())}`,
+    style: {
+      color: WAYPOINT_COLORS[0],
+      icon: WAYPOINT_ICONS[0]
+    }
+  };
+}
 
 async function fetchParcelFeatureCollection(
   bounds: import("leaflet").LatLngBounds,
@@ -80,21 +99,6 @@ function styleByConservation(c: ParcelFeatureProps["conservation_class"]) {
   return { color: "#22c55e", weight: 1, fillColor: "#22c55e", fillOpacity: 0.04 };
 }
 
-function makeDefaultWaypoint(lat: number, lng: number): Waypoint {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const name = `Waypoint ${pad(now.getMonth() + 1)}/${pad(now.getDate())}/${String(now.getFullYear()).slice(-2)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  return {
-    lat,
-    lng,
-    name,
-    style: {
-      color: WAYPOINT_COLORS[0],
-      icon: WAYPOINT_ICONS[0]
-    }
-  };
-}
-
 export default function MapView({ onMapReady }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
@@ -106,7 +110,7 @@ export default function MapView({ onMapReady }: Props) {
   const labelsLayerRef = useRef<import("leaflet").TileLayer | null>(null);
 
   const userMarkerRef = useRef<import("leaflet").CircleMarker | null>(null);
-  const waypointMarkerRef = useRef<import("leaflet").Marker | null>(null);
+  const waypointMarkersRef = useRef<Map<string, import("leaflet").Marker>>(new Map());
 
   const watchIdRef = useRef<number | null>(null);
   const smoothingTimerRef = useRef<number | null>(null);
@@ -117,11 +121,38 @@ export default function MapView({ onMapReady }: Props) {
 
   const [layer, setLayer] = useState<"streets" | "satellite" | "hybrid">("satellite");
   const [selectedParcel, setSelectedParcel] = useState<ParcelFeatureProps | null>(null);
-  const [waypoint, setWaypoint] = useState<Waypoint | null>(null);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [savedAddresses, setSavedAddresses] = useState<{ id: string; label: string; address_line: string }[]>([]);
-  const [savedParcels, setSavedParcels] = useState<{ id: string; parcel_id: number }[]>([]);
+  const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const editingWaypoint = waypoints.find((w) => w.id === editingId) || null;
+
+  const persistWaypoints = (next: Waypoint[]) => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(WAYPOINTS_STORAGE_KEY, JSON.stringify(next));
+  };
+
+  const updateWaypoint = (id: string, patch: Partial<Waypoint>) => {
+    setWaypoints((prev) => {
+      const next = prev.map((w) => (w.id === id ? { ...w, ...patch } : w));
+      persistWaypoints(next);
+      return next;
+    });
+  };
+
+  const deleteWaypoint = (id: string) => {
+    setWaypoints((prev) => {
+      const next = prev.filter((w) => w.id !== id);
+      persistWaypoints(next);
+      return next;
+    });
+    setEditingId((cur) => (cur === id ? null : cur));
+
+    const marker = waypointMarkersRef.current.get(id);
+    if (marker && mapRef.current) {
+      mapRef.current.removeLayer(marker);
+      waypointMarkersRef.current.delete(id);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -157,61 +188,13 @@ export default function MapView({ onMapReady }: Props) {
         }
       };
 
-      const supabase = getSupabaseBrowserClient();
-
-      const persistWaypoint = async (next: Waypoint | null) => {
-        if (typeof window !== "undefined") {
-          if (!next) window.localStorage.removeItem(WAYPOINT_STORAGE_KEY);
-          else window.localStorage.setItem(WAYPOINT_STORAGE_KEY, JSON.stringify(next));
-        }
-
-        const { data: userResp } = await supabase.auth.getUser();
-        const user = userResp.user;
-        if (!user) return;
-
-        if (!next) {
-          await supabase.from("waypoints").delete().eq("user_id", user.id).eq("title", "Primary Pin");
-          return;
-        }
-
-        const upsertPayload = {
-          user_id: user.id,
-          title: "Primary Pin",
-          notes: next.name,
-          icon: next.style.icon,
-          color: next.style.color,
-          category: "pin",
-          location: `POINT(${next.lng} ${next.lat})`
-        };
-
-        await (supabase as any)
-          .from("waypoints")
-          .upsert([upsertPayload], { onConflict: "user_id,title", ignoreDuplicates: false });
-      };
-
-      const upsertWaypointMarker = (next: Waypoint) => {
-        const icon = L.divIcon({
-          className: "user-drop-pin-wrap",
-          html: `<div class="user-drop-pin" style="background:${next.style.color}"><div class="user-drop-pin-icon">${next.style.icon}</div></div>`,
-          iconSize: [34, 42],
-          iconAnchor: [17, 40]
+      const addWaypointAt = (lat: number, lng: number) => {
+        setWaypoints((prev) => {
+          const next = [...prev, makeDefaultWaypoint(lat, lng)];
+          persistWaypoints(next);
+          setEditingId(next[next.length - 1].id);
+          return next;
         });
-
-        if (!waypointMarkerRef.current) {
-          waypointMarkerRef.current = L.marker([next.lat, next.lng], { icon, draggable: false }).addTo(map);
-          waypointMarkerRef.current.on("click", () => setEditorOpen(true));
-        } else {
-          waypointMarkerRef.current.setIcon(icon);
-          waypointMarkerRef.current.setLatLng([next.lat, next.lng]);
-        }
-      };
-
-      const setWaypointAt = (lat: number, lng: number) => {
-        const next = makeDefaultWaypoint(lat, lng);
-        setWaypoint(next);
-        void persistWaypoint(next);
-        upsertWaypointMarker(next);
-        setEditorOpen(true);
       };
 
       const refreshParcels = async () => {
@@ -274,7 +257,7 @@ export default function MapView({ onMapReady }: Props) {
       const startLongPress = (e: import("leaflet").LeafletMouseEvent) => {
         if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = window.setTimeout(() => {
-          setWaypointAt(e.latlng.lat, e.latlng.lng);
+          addWaypointAt(e.latlng.lat, e.latlng.lng);
           longPressTimerRef.current = null;
         }, LONG_PRESS_MS);
       };
@@ -285,7 +268,6 @@ export default function MapView({ onMapReady }: Props) {
         }
       };
 
-      // Long press on desktop + mobile (Leaflet emits contextmenu on long tap mobile).
       map.on("mousedown", (e) => startLongPress(e as import("leaflet").LeafletMouseEvent));
       map.on("mouseup", cancelLongPress);
       map.on("mouseout", cancelLongPress);
@@ -294,59 +276,19 @@ export default function MapView({ onMapReady }: Props) {
       map.on("contextmenu", (e) => {
         cancelLongPress();
         const ev = e as import("leaflet").LeafletMouseEvent;
-        setWaypointAt(ev.latlng.lat, ev.latlng.lng);
+        addWaypointAt(ev.latlng.lat, ev.latlng.lng);
       });
 
       if (typeof window !== "undefined") {
         try {
-          const raw = window.localStorage.getItem(WAYPOINT_STORAGE_KEY);
+          const raw = window.localStorage.getItem(WAYPOINTS_STORAGE_KEY);
           if (raw) {
-            const parsed = JSON.parse(raw) as Waypoint;
-            if (Number.isFinite(parsed.lat) && Number.isFinite(parsed.lng)) {
-              setWaypoint(parsed);
-              upsertWaypointMarker(parsed);
-            }
+            const parsed = JSON.parse(raw) as Waypoint[];
+            if (Array.isArray(parsed)) setWaypoints(parsed.filter((w) => Number.isFinite(w.lat) && Number.isFinite(w.lng)));
           }
         } catch {
           // no-op
         }
-      }
-
-      // Attempt cloud restore for signed-in users.
-      try {
-        const { data: userResp } = await supabase.auth.getUser();
-        const user = userResp.user;
-        if (user) {
-          const [{ data: wp }, { data: addrs }, { data: parcels }] = await Promise.all([
-            (supabase as any)
-              .from("waypoints")
-              .select("notes,icon,color,location")
-              .eq("user_id", user.id)
-              .eq("title", "Primary Pin")
-              .maybeSingle(),
-            (supabase as any).from("saved_addresses").select("id,label,address_line").eq("user_id", user.id),
-            (supabase as any).from("saved_parcels").select("id,parcel_id").eq("user_id", user.id)
-          ]);
-
-          if ((wp as any)?.location) {
-            const m = String((wp as any).location).match(/POINT\(([-0-9.]+)\s+([-0-9.]+)\)/i);
-            if (m) {
-              const cloudWp: Waypoint = {
-                lng: Number(m[1]),
-                lat: Number(m[2]),
-                name: (wp as any).notes || "Primary Pin",
-                style: { icon: (wp as any).icon || "✖", color: (wp as any).color || "#ff3b1a" }
-              };
-              setWaypoint(cloudWp);
-              upsertWaypointMarker(cloudWp);
-            }
-          }
-
-          setSavedAddresses((addrs || []) as { id: string; label: string; address_line: string }[]);
-          setSavedParcels((parcels || []) as { id: string; parcel_id: number }[]);
-        }
-      } catch {
-        // ignore cloud restore failures
       }
 
       void refreshParcels();
@@ -390,7 +332,7 @@ export default function MapView({ onMapReady }: Props) {
       if (smoothingTimerRef.current !== null) window.clearInterval(smoothingTimerRef.current);
       if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
       userMarkerRef.current = null;
-      waypointMarkerRef.current = null;
+      waypointMarkersRef.current.clear();
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -422,6 +364,42 @@ export default function MapView({ onMapReady }: Props) {
     const map = mapRef.current;
     if (!map) return;
 
+    import("leaflet").then(({ default: L }) => {
+      const markerMap = waypointMarkersRef.current;
+      const ids = new Set(waypoints.map((w) => w.id));
+
+      markerMap.forEach((marker, id) => {
+        if (!ids.has(id)) {
+          map.removeLayer(marker);
+          markerMap.delete(id);
+        }
+      });
+
+      for (const w of waypoints) {
+        const icon = L.divIcon({
+          className: "user-drop-pin-wrap",
+          html: `<div class="user-drop-pin" style="background:${w.style.color}"><div class="user-drop-pin-icon">${w.style.icon}</div></div>`,
+          iconSize: [34, 42],
+          iconAnchor: [17, 40]
+        });
+
+        const existing = markerMap.get(w.id);
+        if (existing) {
+          existing.setLatLng([w.lat, w.lng]);
+          existing.setIcon(icon);
+        } else {
+          const marker = L.marker([w.lat, w.lng], { icon, draggable: false }).addTo(map);
+          marker.on("click", () => setEditingId(w.id));
+          markerMap.set(w.id, marker);
+        }
+      }
+    });
+  }, [waypoints]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
     const tick = () => {
       const target = targetRef.current;
       const marker = userMarkerRef.current;
@@ -439,82 +417,32 @@ export default function MapView({ onMapReady }: Props) {
     };
   }, []);
 
-  const saveWaypointEdits = (next: Waypoint) => {
-    setWaypoint(next);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(WAYPOINT_STORAGE_KEY, JSON.stringify(next));
-    }
-
-    const marker = waypointMarkerRef.current;
-    const map = mapRef.current;
-    if (!marker || !map) return;
-
-    import("leaflet").then(({ default: L }) => {
-      const icon = L.divIcon({
-        className: "user-drop-pin-wrap",
-        html: `<div class="user-drop-pin" style="background:${next.style.color}"><div class="user-drop-pin-icon">${next.style.icon}</div></div>`,
-        iconSize: [34, 42],
-        iconAnchor: [17, 40]
-      });
-      marker.setIcon(icon);
-      marker.setLatLng([next.lat, next.lng]);
-    });
-  };
-
   return (
     <>
-      <div
-        ref={mapContainerRef}
-        className="map-wrap no-text-select"
-        onContextMenu={(e) => e.preventDefault()}
-      />
+      <div ref={mapContainerRef} className="map-wrap no-text-select" onContextMenu={(e) => e.preventDefault()} />
 
       <div className="waypoint-topbar">
-        <button className="waypoint-top-btn" onClick={() => setEditorOpen(false)}>Cancel</button>
+        <button className="waypoint-top-btn" onClick={() => setEditingId(null)}>Cancel</button>
         <div className="waypoint-top-title">Add Waypoint</div>
-        <button className="waypoint-top-btn waypoint-top-save" onClick={() => setEditorOpen(false)}>Save</button>
+        <button className="waypoint-top-btn waypoint-top-save" onClick={() => setEditingId(null)}>Save</button>
       </div>
 
-      <div className="press-hint">Hold on map ~0.35s to drop pin</div>
-
-      <button className="settings-btn" onClick={() => setSettingsOpen((v) => !v)}>
-        Profile / Settings
-      </button>
+      <div className="press-hint">Hold on map ~0.35s to drop pin (add many pins)</div>
 
       <div className="map-layer-picker">
-        <button className={layer === "streets" ? "active" : ""} onClick={() => setLayer("streets")}>
-          Street View
-        </button>
-        <button className={layer === "satellite" ? "active" : ""} onClick={() => setLayer("satellite")}>
-          Satellite
-        </button>
-        <button className={layer === "hybrid" ? "active" : ""} onClick={() => setLayer("hybrid")}>
-          Hybrid
-        </button>
+        <button className={layer === "streets" ? "active" : ""} onClick={() => setLayer("streets")}>Street View</button>
+        <button className={layer === "satellite" ? "active" : ""} onClick={() => setLayer("satellite")}>Satellite</button>
+        <button className={layer === "hybrid" ? "active" : ""} onClick={() => setLayer("hybrid")}>Hybrid</button>
       </div>
 
-      {settingsOpen ? (
-        <div className="settings-sheet">
-          <div className="settings-title">Settings</div>
-          <div className="settings-block">
-            <div className="settings-subtitle">Saved Addresses ({savedAddresses.length})</div>
-            {savedAddresses.length ? savedAddresses.map((a) => <div key={a.id}>{a.label}: {a.address_line}</div>) : <div>None yet</div>}
-          </div>
-          <div className="settings-block">
-            <div className="settings-subtitle">Saved Parcels ({savedParcels.length})</div>
-            {savedParcels.length ? savedParcels.map((p) => <div key={p.id}>Parcel #{p.parcel_id}</div>) : <div>None yet</div>}
-          </div>
-        </div>
-      ) : null}
-
-      {editorOpen && waypoint ? (
+      {editingWaypoint ? (
         <div className="waypoint-sheet">
           <div className="waypoint-grabber" />
           <label className="waypoint-label">Waypoint Name</label>
           <input
             className="waypoint-input"
-            value={waypoint.name}
-            onChange={(e) => saveWaypointEdits({ ...waypoint, name: e.target.value })}
+            value={editingWaypoint.name}
+            onChange={(e) => updateWaypoint(editingWaypoint.id, { name: e.target.value })}
           />
 
           <div className="waypoint-label" style={{ marginTop: 12 }}>Type</div>
@@ -522,12 +450,12 @@ export default function MapView({ onMapReady }: Props) {
 
           <div className="waypoint-style-row">
             {WAYPOINT_ICONS.map((icon) => {
-              const active = waypoint.style.icon === icon;
+              const active = editingWaypoint.style.icon === icon;
               return (
                 <button
                   key={`icon-${icon}`}
                   className={`waypoint-style-btn ${active ? "active" : ""}`}
-                  onClick={() => saveWaypointEdits({ ...waypoint, style: { ...waypoint.style, icon } })}
+                  onClick={() => updateWaypoint(editingWaypoint.id, { style: { ...editingWaypoint.style, icon } })}
                 >
                   {icon}
                 </button>
@@ -537,74 +465,21 @@ export default function MapView({ onMapReady }: Props) {
 
           <div className="waypoint-color-row">
             {WAYPOINT_COLORS.map((color) => {
-              const active = waypoint.style.color === color;
+              const active = editingWaypoint.style.color === color;
               return (
                 <button
                   key={`color-${color}`}
                   className={`waypoint-color-btn ${active ? "active" : ""}`}
                   style={{ background: color }}
-                  onClick={() => saveWaypointEdits({ ...waypoint, style: { ...waypoint.style, color } })}
+                  onClick={() => updateWaypoint(editingWaypoint.id, { style: { ...editingWaypoint.style, color } })}
                 />
               );
             })}
           </div>
 
           <div className="waypoint-actions">
-            <button
-              className="waypoint-save-btn"
-              onClick={() => {
-                void (async () => {
-                  const next = waypoint;
-                  setEditorOpen(false);
-                  if (next) {
-                    if (typeof window !== "undefined") window.localStorage.setItem(WAYPOINT_STORAGE_KEY, JSON.stringify(next));
-                    const supabase = getSupabaseBrowserClient();
-                    const { data: userResp } = await supabase.auth.getUser();
-                    const user = userResp.user;
-                    if (user) {
-                      await (supabase as any).from("waypoints").upsert(
-                        [
-                          {
-                            user_id: user.id,
-                            title: "Primary Pin",
-                            notes: next.name,
-                            icon: next.style.icon,
-                            color: next.style.color,
-                            category: "pin",
-                            location: `POINT(${next.lng} ${next.lat})`
-                          }
-                        ],
-                        { onConflict: "user_id,title", ignoreDuplicates: false }
-                      );
-                    }
-                  }
-                })();
-              }}
-            >
-              Save
-            </button>
-            <button
-              className="waypoint-delete-btn"
-              onClick={() => {
-                setWaypoint(null);
-                setEditorOpen(false);
-                if (typeof window !== "undefined") window.localStorage.removeItem(WAYPOINT_STORAGE_KEY);
-                if (waypointMarkerRef.current && mapRef.current) {
-                  mapRef.current.removeLayer(waypointMarkerRef.current);
-                  waypointMarkerRef.current = null;
-                }
-                void (async () => {
-                  const supabase = getSupabaseBrowserClient();
-                  const { data: userResp } = await supabase.auth.getUser();
-                  const user = userResp.user;
-                  if (user) {
-                    await (supabase as any).from("waypoints").delete().eq("user_id", user.id).eq("title", "Primary Pin");
-                  }
-                })();
-              }}
-            >
-              Delete
-            </button>
+            <button className="waypoint-save-btn" onClick={() => setEditingId(null)}>Save</button>
+            <button className="waypoint-delete-btn" onClick={() => deleteWaypoint(editingWaypoint.id)}>Delete</button>
           </div>
         </div>
       ) : null}
@@ -616,32 +491,13 @@ export default function MapView({ onMapReady }: Props) {
               <div className="parcel-sheet-eyebrow">Selected Parcel</div>
               <div className="parcel-sheet-title">{selectedParcel.apn || "Parcel"}</div>
             </div>
-            <button className="parcel-sheet-close" onClick={() => setSelectedParcel(null)}>
-              Close
-            </button>
+            <button className="parcel-sheet-close" onClick={() => setSelectedParcel(null)}>Close</button>
           </div>
-
           <div className="parcel-grid">
-            <div>
-              <span>Owner</span>
-              <strong>{selectedParcel.owner_name || "—"}</strong>
-            </div>
-            <div>
-              <span>Acreage</span>
-              <strong>
-                {typeof selectedParcel.acreage === "number" && !Number.isNaN(selectedParcel.acreage)
-                  ? selectedParcel.acreage.toFixed(2)
-                  : "—"}
-              </strong>
-            </div>
-            <div>
-              <span>County</span>
-              <strong>{selectedParcel.county || "—"}</strong>
-            </div>
-            <div>
-              <span>State</span>
-              <strong>{selectedParcel.state || "—"}</strong>
-            </div>
+            <div><span>Owner</span><strong>{selectedParcel.owner_name || "—"}</strong></div>
+            <div><span>Acreage</span><strong>{typeof selectedParcel.acreage === "number" && !Number.isNaN(selectedParcel.acreage) ? selectedParcel.acreage.toFixed(2) : "—"}</strong></div>
+            <div><span>County</span><strong>{selectedParcel.county || "—"}</strong></div>
+            <div><span>State</span><strong>{selectedParcel.state || "—"}</strong></div>
           </div>
         </div>
       ) : null}
