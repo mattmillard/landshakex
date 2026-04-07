@@ -6,8 +6,30 @@ create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   display_name text,
   role text default 'hunter',
-  created_at timestamptz default now()
+  home_address text,
+  preferences jsonb default '{}'::jsonb,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
 );
+
+-- Auto-create profile row for every new auth user.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, display_name)
+  values (new.id, coalesce(new.raw_user_meta_data ->> 'full_name', new.email));
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
 
 -- Parcels
 create table if not exists parcels (
@@ -42,13 +64,15 @@ create table if not exists parcel_history (
   metadata jsonb default '{}'::jsonb
 );
 
--- Waypoints
+-- Waypoints / Pins (persistent, user-owned)
 create table if not exists waypoints (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references profiles(id) on delete cascade,
   title text not null,
   notes text,
   category text,
+  icon text default '✖',
+  color text default '#ff3b1a',
   location geography(point, 4326) not null,
   photo_urls text[] default '{}',
   created_at timestamptz default now(),
@@ -72,6 +96,33 @@ create table if not exists tracks (
 
 create index if not exists tracks_path_gix on tracks using gist (path);
 create index if not exists tracks_user_idx on tracks (user_id);
+
+-- Saved addresses
+create table if not exists saved_addresses (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  label text not null,
+  address_line text not null,
+  location geography(point, 4326),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists saved_addresses_user_idx on saved_addresses (user_id);
+create index if not exists saved_addresses_loc_gix on saved_addresses using gist (location);
+
+-- Saved parcel bookmarks
+create table if not exists saved_parcels (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  parcel_id bigint not null references parcels(id) on delete cascade,
+  notes text,
+  created_at timestamptz default now(),
+  unique (user_id, parcel_id)
+);
+
+create index if not exists saved_parcels_user_idx on saved_parcels (user_id);
+create index if not exists saved_parcels_parcel_idx on saved_parcels (parcel_id);
 
 -- Offline saved areas
 create table if not exists saved_areas (
@@ -101,6 +152,8 @@ create table if not exists map_shares (
 alter table profiles enable row level security;
 alter table waypoints enable row level security;
 alter table tracks enable row level security;
+alter table saved_addresses enable row level security;
+alter table saved_parcels enable row level security;
 alter table saved_areas enable row level security;
 alter table map_shares enable row level security;
 
@@ -115,6 +168,12 @@ create policy if not exists waypoints_owner_all on waypoints
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy if not exists tracks_owner_all on tracks
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy if not exists saved_addresses_owner_all on saved_addresses
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy if not exists saved_parcels_owner_all on saved_parcels
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy if not exists saved_areas_owner_all on saved_areas

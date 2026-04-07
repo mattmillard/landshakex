@@ -1,7 +1,13 @@
 "use client";
 
 import MapView from "@/components/map/MapView";
+import AuthPanel from "@/components/auth/AuthPanel";
 
 export default function HomePage() {
-  return <main><MapView /></main>;
+  return (
+    <main>
+      <AuthPanel />
+      <MapView />
+    </main>
+  );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 
 const CENTER: [number, number] = [39.8283, -98.5795];
 const WAYPOINT_STORAGE_KEY = "landshakex:waypoint:v2";
@@ -118,6 +119,9 @@ export default function MapView({ onMapReady }: Props) {
   const [selectedParcel, setSelectedParcel] = useState<ParcelFeatureProps | null>(null);
   const [waypoint, setWaypoint] = useState<Waypoint | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [savedAddresses, setSavedAddresses] = useState<{ id: string; label: string; address_line: string }[]>([]);
+  const [savedParcels, setSavedParcels] = useState<{ id: string; parcel_id: number }[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -153,10 +157,36 @@ export default function MapView({ onMapReady }: Props) {
         }
       };
 
-      const persistWaypoint = (next: Waypoint | null) => {
-        if (typeof window === "undefined") return;
-        if (!next) window.localStorage.removeItem(WAYPOINT_STORAGE_KEY);
-        else window.localStorage.setItem(WAYPOINT_STORAGE_KEY, JSON.stringify(next));
+      const supabase = getSupabaseBrowserClient();
+
+      const persistWaypoint = async (next: Waypoint | null) => {
+        if (typeof window !== "undefined") {
+          if (!next) window.localStorage.removeItem(WAYPOINT_STORAGE_KEY);
+          else window.localStorage.setItem(WAYPOINT_STORAGE_KEY, JSON.stringify(next));
+        }
+
+        const { data: userResp } = await supabase.auth.getUser();
+        const user = userResp.user;
+        if (!user) return;
+
+        if (!next) {
+          await supabase.from("waypoints").delete().eq("user_id", user.id).eq("title", "Primary Pin");
+          return;
+        }
+
+        const upsertPayload = {
+          user_id: user.id,
+          title: "Primary Pin",
+          notes: next.name,
+          icon: next.style.icon,
+          color: next.style.color,
+          category: "pin",
+          location: `POINT(${next.lng} ${next.lat})`
+        };
+
+        await (supabase as any)
+          .from("waypoints")
+          .upsert([upsertPayload], { onConflict: "user_id,title", ignoreDuplicates: false });
       };
 
       const upsertWaypointMarker = (next: Waypoint) => {
@@ -179,7 +209,7 @@ export default function MapView({ onMapReady }: Props) {
       const setWaypointAt = (lat: number, lng: number) => {
         const next = makeDefaultWaypoint(lat, lng);
         setWaypoint(next);
-        persistWaypoint(next);
+        void persistWaypoint(next);
         upsertWaypointMarker(next);
         setEditorOpen(true);
       };
@@ -280,6 +310,43 @@ export default function MapView({ onMapReady }: Props) {
         } catch {
           // no-op
         }
+      }
+
+      // Attempt cloud restore for signed-in users.
+      try {
+        const { data: userResp } = await supabase.auth.getUser();
+        const user = userResp.user;
+        if (user) {
+          const [{ data: wp }, { data: addrs }, { data: parcels }] = await Promise.all([
+            (supabase as any)
+              .from("waypoints")
+              .select("notes,icon,color,location")
+              .eq("user_id", user.id)
+              .eq("title", "Primary Pin")
+              .maybeSingle(),
+            (supabase as any).from("saved_addresses").select("id,label,address_line").eq("user_id", user.id),
+            (supabase as any).from("saved_parcels").select("id,parcel_id").eq("user_id", user.id)
+          ]);
+
+          if ((wp as any)?.location) {
+            const m = String((wp as any).location).match(/POINT\(([-0-9.]+)\s+([-0-9.]+)\)/i);
+            if (m) {
+              const cloudWp: Waypoint = {
+                lng: Number(m[1]),
+                lat: Number(m[2]),
+                name: (wp as any).notes || "Primary Pin",
+                style: { icon: (wp as any).icon || "✖", color: (wp as any).color || "#ff3b1a" }
+              };
+              setWaypoint(cloudWp);
+              upsertWaypointMarker(cloudWp);
+            }
+          }
+
+          setSavedAddresses((addrs || []) as { id: string; label: string; address_line: string }[]);
+          setSavedParcels((parcels || []) as { id: string; parcel_id: number }[]);
+        }
+      } catch {
+        // ignore cloud restore failures
       }
 
       void refreshParcels();
@@ -410,6 +477,10 @@ export default function MapView({ onMapReady }: Props) {
 
       <div className="press-hint">Hold on map ~0.35s to drop pin</div>
 
+      <button className="settings-btn" onClick={() => setSettingsOpen((v) => !v)}>
+        Profile / Settings
+      </button>
+
       <div className="map-layer-picker">
         <button className={layer === "streets" ? "active" : ""} onClick={() => setLayer("streets")}>
           Street View
@@ -421,6 +492,20 @@ export default function MapView({ onMapReady }: Props) {
           Hybrid
         </button>
       </div>
+
+      {settingsOpen ? (
+        <div className="settings-sheet">
+          <div className="settings-title">Settings</div>
+          <div className="settings-block">
+            <div className="settings-subtitle">Saved Addresses ({savedAddresses.length})</div>
+            {savedAddresses.length ? savedAddresses.map((a) => <div key={a.id}>{a.label}: {a.address_line}</div>) : <div>None yet</div>}
+          </div>
+          <div className="settings-block">
+            <div className="settings-subtitle">Saved Parcels ({savedParcels.length})</div>
+            {savedParcels.length ? savedParcels.map((p) => <div key={p.id}>Parcel #{p.parcel_id}</div>) : <div>None yet</div>}
+          </div>
+        </div>
+      ) : null}
 
       {editorOpen && waypoint ? (
         <div className="waypoint-sheet">
@@ -465,7 +550,37 @@ export default function MapView({ onMapReady }: Props) {
           </div>
 
           <div className="waypoint-actions">
-            <button className="waypoint-save-btn" onClick={() => setEditorOpen(false)}>
+            <button
+              className="waypoint-save-btn"
+              onClick={() => {
+                void (async () => {
+                  const next = waypoint;
+                  setEditorOpen(false);
+                  if (next) {
+                    if (typeof window !== "undefined") window.localStorage.setItem(WAYPOINT_STORAGE_KEY, JSON.stringify(next));
+                    const supabase = getSupabaseBrowserClient();
+                    const { data: userResp } = await supabase.auth.getUser();
+                    const user = userResp.user;
+                    if (user) {
+                      await (supabase as any).from("waypoints").upsert(
+                        [
+                          {
+                            user_id: user.id,
+                            title: "Primary Pin",
+                            notes: next.name,
+                            icon: next.style.icon,
+                            color: next.style.color,
+                            category: "pin",
+                            location: `POINT(${next.lng} ${next.lat})`
+                          }
+                        ],
+                        { onConflict: "user_id,title", ignoreDuplicates: false }
+                      );
+                    }
+                  }
+                })();
+              }}
+            >
               Save
             </button>
             <button
@@ -478,6 +593,14 @@ export default function MapView({ onMapReady }: Props) {
                   mapRef.current.removeLayer(waypointMarkerRef.current);
                   waypointMarkerRef.current = null;
                 }
+                void (async () => {
+                  const supabase = getSupabaseBrowserClient();
+                  const { data: userResp } = await supabase.auth.getUser();
+                  const user = userResp.user;
+                  if (user) {
+                    await (supabase as any).from("waypoints").delete().eq("user_id", user.id).eq("title", "Primary Pin");
+                  }
+                })();
               }}
             >
               Delete
