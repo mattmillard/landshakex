@@ -126,6 +126,47 @@ html, body {
   word-break: break-word;
 }
 
+.pin-clear-btn {
+  position: fixed;
+  top: 68px;
+  left: 14px;
+  z-index: 21;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(12, 18, 30, 0.9);
+  color: #e5e7eb;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  backdrop-filter: blur(6px);
+}
+
+.user-drop-pin-wrap {
+  background: transparent;
+  border: 0;
+}
+
+.user-drop-pin {
+  width: 34px;
+  height: 42px;
+  border-radius: 17px 17px 17px 0;
+  transform: rotate(-45deg);
+  background: #ef4444;
+  border: 2px solid #ffffff;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.45);
+  position: relative;
+}
+
+.user-drop-pin-icon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 @media (min-width: 768px) {
   .parcel-sheet {
     left: auto;

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 const CENTER: [number, number] = [39.8283, -98.5795];
+const USER_PIN_STORAGE_KEY = "landshakex:userDroppedPin:v1";
 
 type Props = {
   onMapReady?: () => void;
@@ -16,6 +17,11 @@ type ParcelFeatureProps = {
   county?: string;
   state?: string;
   conservation_class?: "federal" | "state" | null;
+};
+
+type UserPinState = {
+  lat: number;
+  lng: number;
 };
 
 async function fetchParcelFeatureCollection(
@@ -57,18 +63,15 @@ function normalizeParcelProps(raw: Record<string, unknown>): ParcelFeatureProps 
 }
 
 function styleByConservation(c: ParcelFeatureProps["conservation_class"]) {
-  if (c === "federal") {
-    return { color: "#60a5fa", weight: 2, fillColor: "#3b82f6", fillOpacity: 0.22 };
-  }
-  if (c === "state") {
-    return { color: "#fbbf24", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.2 };
-  }
+  if (c === "federal") return { color: "#60a5fa", weight: 2, fillColor: "#3b82f6", fillOpacity: 0.22 };
+  if (c === "state") return { color: "#fbbf24", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.2 };
   return { color: "#22c55e", weight: 1, fillColor: "#22c55e", fillOpacity: 0.04 };
 }
 
 export default function MapView({ onMapReady }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
+
   const parcelLayerRef = useRef<import("leaflet").GeoJSON | null>(null);
   const conservationLayerRef = useRef<import("leaflet").GeoJSON | null>(null);
   const streetLayerRef = useRef<import("leaflet").TileLayer | null>(null);
@@ -76,13 +79,16 @@ export default function MapView({ onMapReady }: Props) {
   const labelsLayerRef = useRef<import("leaflet").TileLayer | null>(null);
 
   const [layer, setLayer] = useState<"streets" | "satellite" | "hybrid">("satellite");
-  const [followUser, setFollowUser] = useState(false);
   const [selectedParcel, setSelectedParcel] = useState<ParcelFeatureProps | null>(null);
+  const [droppedPin, setDroppedPin] = useState<UserPinState | null>(null);
 
   const targetRef = useRef<[number, number] | null>(null);
   const markerRef = useRef<import("leaflet").CircleMarker | null>(null);
+  const userDroppedPinRef = useRef<import("leaflet").Marker | null>(null);
+
   const watchIdRef = useRef<number | null>(null);
   const smoothingTimerRef = useRef<number | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
   const hasCenteredRef = useRef(false);
   const fetchPendingRef = useRef(false);
 
@@ -111,7 +117,6 @@ export default function MapView({ onMapReady }: Props) {
         "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
         { maxZoom: 20, attribution: "Labels &copy; Esri" }
       );
-
       satelliteLayerRef.current.addTo(map);
 
       const clearLayer = (r: React.MutableRefObject<import("leaflet").GeoJSON | null>) => {
@@ -119,6 +124,34 @@ export default function MapView({ onMapReady }: Props) {
           map.removeLayer(r.current);
           r.current = null;
         }
+      };
+
+      const persistDroppedPin = (pin: UserPinState | null) => {
+        if (typeof window === "undefined") return;
+        if (!pin) window.localStorage.removeItem(USER_PIN_STORAGE_KEY);
+        else window.localStorage.setItem(USER_PIN_STORAGE_KEY, JSON.stringify(pin));
+      };
+
+      const upsertDroppedPinMarker = (pin: UserPinState) => {
+        const icon = L.divIcon({
+          className: "user-drop-pin-wrap",
+          html: '<div class="user-drop-pin"><div class="user-drop-pin-icon">◆</div></div>',
+          iconSize: [34, 42],
+          iconAnchor: [17, 40]
+        });
+
+        if (!userDroppedPinRef.current) {
+          userDroppedPinRef.current = L.marker([pin.lat, pin.lng], { icon, draggable: false }).addTo(map);
+        } else {
+          userDroppedPinRef.current.setLatLng([pin.lat, pin.lng]);
+        }
+      };
+
+      const setDroppedPinAt = (lat: number, lng: number) => {
+        const pin = { lat, lng };
+        setDroppedPin(pin);
+        persistDroppedPin(pin);
+        upsertDroppedPinMarker(pin);
       };
 
       const refreshParcels = async () => {
@@ -146,7 +179,6 @@ export default function MapView({ onMapReady }: Props) {
             }
           }
 
-          // Show conservation/federal/state farther out (double distance): z>=10.
           if (zoom < 10) {
             clearLayer(conservationLayerRef);
           } else {
@@ -179,9 +211,46 @@ export default function MapView({ onMapReady }: Props) {
         void refreshParcels();
       });
 
+      const LONG_PRESS_MS = 550;
+      const startLongPress = (e: import("leaflet").LeafletMouseEvent) => {
+        if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = window.setTimeout(() => {
+          setDroppedPinAt(e.latlng.lat, e.latlng.lng);
+          longPressTimerRef.current = null;
+        }, LONG_PRESS_MS);
+      };
+      const cancelLongPress = () => {
+        if (longPressTimerRef.current !== null) {
+          window.clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+      };
+
+      map.on("mousedown", (e) => startLongPress(e as import("leaflet").LeafletMouseEvent));
+      map.on("touchstart", (e) => startLongPress(e as import("leaflet").LeafletMouseEvent));
+      map.on("mouseup", cancelLongPress);
+      map.on("touchend", cancelLongPress);
+      map.on("mouseout", cancelLongPress);
+      map.on("dragstart", cancelLongPress);
+      map.on("zoomstart", cancelLongPress);
+
+      if (typeof window !== "undefined") {
+        try {
+          const raw = window.localStorage.getItem(USER_PIN_STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw) as UserPinState;
+            if (Number.isFinite(parsed.lat) && Number.isFinite(parsed.lng)) {
+              setDroppedPin(parsed);
+              upsertDroppedPinMarker(parsed);
+            }
+          }
+        } catch {
+          // no-op
+        }
+      }
+
       void refreshParcels();
       onMapReady?.();
-
       mapRef.current = map;
 
       if (typeof navigator !== "undefined" && navigator.geolocation) {
@@ -203,7 +272,6 @@ export default function MapView({ onMapReady }: Props) {
             if (!hasCenteredRef.current) {
               map.setView([lngLat[1], lngLat[0]], 14, { animate: true });
               hasCenteredRef.current = true;
-              setFollowUser(false);
             }
           },
           () => undefined,
@@ -219,10 +287,10 @@ export default function MapView({ onMapReady }: Props) {
       if (watchIdRef.current !== null && typeof navigator !== "undefined" && navigator.geolocation) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
-      if (smoothingTimerRef.current !== null) {
-        window.clearInterval(smoothingTimerRef.current);
-      }
+      if (smoothingTimerRef.current !== null) window.clearInterval(smoothingTimerRef.current);
+      if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
       markerRef.current = null;
+      userDroppedPinRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -263,24 +331,18 @@ export default function MapView({ onMapReady }: Props) {
       const easedLat = current.lat + (target[1] - current.lat) * 0.18;
       const easedLng = current.lng + (target[0] - current.lng) * 0.18;
       marker.setLatLng([easedLat, easedLng]);
-
-      if (followUser) {
-        const center = map.getCenter();
-        const centerLng = center.lng + (easedLng - center.lng) * 0.1;
-        const centerLat = center.lat + (easedLat - center.lat) * 0.1;
-        map.panTo([centerLat, centerLng], { animate: true });
-      }
     };
 
     smoothingTimerRef.current = window.setInterval(tick, 120);
     return () => {
       if (smoothingTimerRef.current !== null) window.clearInterval(smoothingTimerRef.current);
     };
-  }, [followUser]);
+  }, []);
 
   return (
     <>
       <div ref={mapContainerRef} className="map-wrap" />
+
       <div className="map-layer-picker">
         <button className={layer === "streets" ? "active" : ""} onClick={() => setLayer("streets")}>
           Street View
@@ -292,6 +354,22 @@ export default function MapView({ onMapReady }: Props) {
           Hybrid
         </button>
       </div>
+
+      {droppedPin ? (
+        <button
+          className="pin-clear-btn"
+          onClick={() => {
+            setDroppedPin(null);
+            if (typeof window !== "undefined") window.localStorage.removeItem(USER_PIN_STORAGE_KEY);
+            if (userDroppedPinRef.current && mapRef.current) {
+              mapRef.current.removeLayer(userDroppedPinRef.current);
+              userDroppedPinRef.current = null;
+            }
+          }}
+        >
+          Clear Pin
+        </button>
+      ) : null}
 
       {selectedParcel ? (
         <div className="parcel-sheet">
