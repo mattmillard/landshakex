@@ -27,7 +27,7 @@ html, body {
 
 .auth-panel {
   position: fixed;
-  top: 58px;
+  top: 12px;
   right: 14px;
   z-index: 50;
   width: min(330px, calc(100vw - 28px));
@@ -78,7 +78,7 @@ html, body {
 
 .settings-btn {
   position: fixed;
-  top: 58px;
+  top: 12px;
   left: 14px;
   z-index: 41;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -93,7 +93,7 @@ html, body {
   position: fixed;
   left: 12px;
   right: 12px;
-  top: 98px;
+  top: 52px;
   z-index: 46;
   background: rgba(9, 15, 25, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -127,7 +127,7 @@ html, body {
 
 .press-hint {
   position: fixed;
-  top: 58px;
+  top: 12px;
   left: 14px;
   z-index: 20;
   font-size: 11px;
@@ -140,7 +140,7 @@ html, body {
 
 .map-layer-picker {
   position: fixed;
-  top: 88px;
+  top: 42px;
   left: 14px;
   z-index: 20;
   display: flex;
@@ -167,39 +167,6 @@ html, body {
   color: #04130a;
   border-color: #22c55e;
   font-weight: 700;
-}
-
-.waypoint-topbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 40;
-  height: 54px;
-  background: rgba(17, 24, 39, 0.96);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.waypoint-top-btn {
-  background: transparent;
-  border: 0;
-  color: #ffffff;
-  font-weight: 600;
-  font-size: 17px;
-}
-
-.waypoint-top-save {
-  color: #ff3b1a;
-}
-
-.waypoint-top-title {
-  color: #ffffff;
-  font-size: 22px;
-  font-weight: 500;
 }
 
 .waypoint-sheet {

@@ -495,12 +495,6 @@ export default function MapView({ onMapReady }: Props) {
     <>
       <div ref={mapContainerRef} className="map-wrap no-text-select" onContextMenu={(e) => e.preventDefault()} />
 
-      <div className="waypoint-topbar">
-        <button className="waypoint-top-btn" onClick={() => setEditingId(null)}>Cancel</button>
-        <div className="waypoint-top-title">Add Waypoint</div>
-        <button className="waypoint-top-btn waypoint-top-save" onClick={() => setEditingId(null)}>Save</button>
-      </div>
-
       <div className="press-hint">Hold on map ~0.35s to drop pin (add many pins)</div>
 
       <div className="map-layer-picker">
