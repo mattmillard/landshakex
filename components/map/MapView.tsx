@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 
 const CENTER: [number, number] = [39.8283, -98.5795];
-const USER_PIN_STORAGE_KEY = "landshakex:userDroppedPin:v1";
+const WAYPOINT_STORAGE_KEY = "landshakex:waypoint:v2";
+const LONG_PRESS_MS = 350;
 
 type Props = {
   onMapReady?: () => void;
@@ -19,10 +20,20 @@ type ParcelFeatureProps = {
   conservation_class?: "federal" | "state" | null;
 };
 
-type UserPinState = {
+type WaypointStyle = {
+  color: string;
+  icon: string;
+};
+
+type Waypoint = {
   lat: number;
   lng: number;
+  name: string;
+  style: WaypointStyle;
 };
+
+const WAYPOINT_COLORS = ["#ff3b1a", "#f59e0b", "#10b981", "#3b82f6", "#a855f7"];
+const WAYPOINT_ICONS = ["✖", "🎯", "⛳", "🦃", "🗼", "＋"];
 
 async function fetchParcelFeatureCollection(
   bounds: import("leaflet").LatLngBounds,
@@ -68,6 +79,21 @@ function styleByConservation(c: ParcelFeatureProps["conservation_class"]) {
   return { color: "#22c55e", weight: 1, fillColor: "#22c55e", fillOpacity: 0.04 };
 }
 
+function makeDefaultWaypoint(lat: number, lng: number): Waypoint {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const name = `Waypoint ${pad(now.getMonth() + 1)}/${pad(now.getDate())}/${String(now.getFullYear()).slice(-2)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  return {
+    lat,
+    lng,
+    name,
+    style: {
+      color: WAYPOINT_COLORS[0],
+      icon: WAYPOINT_ICONS[0]
+    }
+  };
+}
+
 export default function MapView({ onMapReady }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
@@ -78,19 +104,20 @@ export default function MapView({ onMapReady }: Props) {
   const satelliteLayerRef = useRef<import("leaflet").TileLayer | null>(null);
   const labelsLayerRef = useRef<import("leaflet").TileLayer | null>(null);
 
-  const [layer, setLayer] = useState<"streets" | "satellite" | "hybrid">("satellite");
-  const [selectedParcel, setSelectedParcel] = useState<ParcelFeatureProps | null>(null);
-  const [droppedPin, setDroppedPin] = useState<UserPinState | null>(null);
-
-  const targetRef = useRef<[number, number] | null>(null);
-  const markerRef = useRef<import("leaflet").CircleMarker | null>(null);
-  const userDroppedPinRef = useRef<import("leaflet").Marker | null>(null);
+  const userMarkerRef = useRef<import("leaflet").CircleMarker | null>(null);
+  const waypointMarkerRef = useRef<import("leaflet").Marker | null>(null);
 
   const watchIdRef = useRef<number | null>(null);
   const smoothingTimerRef = useRef<number | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const hasCenteredRef = useRef(false);
   const fetchPendingRef = useRef(false);
+  const targetRef = useRef<[number, number] | null>(null);
+
+  const [layer, setLayer] = useState<"streets" | "satellite" | "hybrid">("satellite");
+  const [selectedParcel, setSelectedParcel] = useState<ParcelFeatureProps | null>(null);
+  const [waypoint, setWaypoint] = useState<Waypoint | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -126,32 +153,35 @@ export default function MapView({ onMapReady }: Props) {
         }
       };
 
-      const persistDroppedPin = (pin: UserPinState | null) => {
+      const persistWaypoint = (next: Waypoint | null) => {
         if (typeof window === "undefined") return;
-        if (!pin) window.localStorage.removeItem(USER_PIN_STORAGE_KEY);
-        else window.localStorage.setItem(USER_PIN_STORAGE_KEY, JSON.stringify(pin));
+        if (!next) window.localStorage.removeItem(WAYPOINT_STORAGE_KEY);
+        else window.localStorage.setItem(WAYPOINT_STORAGE_KEY, JSON.stringify(next));
       };
 
-      const upsertDroppedPinMarker = (pin: UserPinState) => {
+      const upsertWaypointMarker = (next: Waypoint) => {
         const icon = L.divIcon({
           className: "user-drop-pin-wrap",
-          html: '<div class="user-drop-pin"><div class="user-drop-pin-icon">◆</div></div>',
+          html: `<div class="user-drop-pin" style="background:${next.style.color}"><div class="user-drop-pin-icon">${next.style.icon}</div></div>`,
           iconSize: [34, 42],
           iconAnchor: [17, 40]
         });
 
-        if (!userDroppedPinRef.current) {
-          userDroppedPinRef.current = L.marker([pin.lat, pin.lng], { icon, draggable: false }).addTo(map);
+        if (!waypointMarkerRef.current) {
+          waypointMarkerRef.current = L.marker([next.lat, next.lng], { icon, draggable: false }).addTo(map);
+          waypointMarkerRef.current.on("click", () => setEditorOpen(true));
         } else {
-          userDroppedPinRef.current.setLatLng([pin.lat, pin.lng]);
+          waypointMarkerRef.current.setIcon(icon);
+          waypointMarkerRef.current.setLatLng([next.lat, next.lng]);
         }
       };
 
-      const setDroppedPinAt = (lat: number, lng: number) => {
-        const pin = { lat, lng };
-        setDroppedPin(pin);
-        persistDroppedPin(pin);
-        upsertDroppedPinMarker(pin);
+      const setWaypointAt = (lat: number, lng: number) => {
+        const next = makeDefaultWaypoint(lat, lng);
+        setWaypoint(next);
+        persistWaypoint(next);
+        upsertWaypointMarker(next);
+        setEditorOpen(true);
       };
 
       const refreshParcels = async () => {
@@ -211,11 +241,10 @@ export default function MapView({ onMapReady }: Props) {
         void refreshParcels();
       });
 
-      const LONG_PRESS_MS = 550;
       const startLongPress = (e: import("leaflet").LeafletMouseEvent) => {
         if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = window.setTimeout(() => {
-          setDroppedPinAt(e.latlng.lat, e.latlng.lng);
+          setWaypointAt(e.latlng.lat, e.latlng.lng);
           longPressTimerRef.current = null;
         }, LONG_PRESS_MS);
       };
@@ -236,12 +265,12 @@ export default function MapView({ onMapReady }: Props) {
 
       if (typeof window !== "undefined") {
         try {
-          const raw = window.localStorage.getItem(USER_PIN_STORAGE_KEY);
+          const raw = window.localStorage.getItem(WAYPOINT_STORAGE_KEY);
           if (raw) {
-            const parsed = JSON.parse(raw) as UserPinState;
+            const parsed = JSON.parse(raw) as Waypoint;
             if (Number.isFinite(parsed.lat) && Number.isFinite(parsed.lng)) {
-              setDroppedPin(parsed);
-              upsertDroppedPinMarker(parsed);
+              setWaypoint(parsed);
+              upsertWaypointMarker(parsed);
             }
           }
         } catch {
@@ -259,8 +288,8 @@ export default function MapView({ onMapReady }: Props) {
             const lngLat: [number, number] = [coords.longitude, coords.latitude];
             targetRef.current = lngLat;
 
-            if (!markerRef.current) {
-              markerRef.current = L.circleMarker([lngLat[1], lngLat[0]], {
+            if (!userMarkerRef.current) {
+              userMarkerRef.current = L.circleMarker([lngLat[1], lngLat[0]], {
                 radius: 7,
                 color: "#04130a",
                 weight: 2,
@@ -289,8 +318,8 @@ export default function MapView({ onMapReady }: Props) {
       }
       if (smoothingTimerRef.current !== null) window.clearInterval(smoothingTimerRef.current);
       if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
-      markerRef.current = null;
-      userDroppedPinRef.current = null;
+      userMarkerRef.current = null;
+      waypointMarkerRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -324,7 +353,7 @@ export default function MapView({ onMapReady }: Props) {
 
     const tick = () => {
       const target = targetRef.current;
-      const marker = markerRef.current;
+      const marker = userMarkerRef.current;
       if (!target || !marker) return;
 
       const current = marker.getLatLng();
@@ -339,9 +368,37 @@ export default function MapView({ onMapReady }: Props) {
     };
   }, []);
 
+  const saveWaypointEdits = (next: Waypoint) => {
+    setWaypoint(next);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(WAYPOINT_STORAGE_KEY, JSON.stringify(next));
+    }
+
+    const marker = waypointMarkerRef.current;
+    const map = mapRef.current;
+    if (!marker || !map) return;
+
+    import("leaflet").then(({ default: L }) => {
+      const icon = L.divIcon({
+        className: "user-drop-pin-wrap",
+        html: `<div class="user-drop-pin" style="background:${next.style.color}"><div class="user-drop-pin-icon">${next.style.icon}</div></div>`,
+        iconSize: [34, 42],
+        iconAnchor: [17, 40]
+      });
+      marker.setIcon(icon);
+      marker.setLatLng([next.lat, next.lng]);
+    });
+  };
+
   return (
     <>
-      <div ref={mapContainerRef} className="map-wrap" />
+      <div ref={mapContainerRef} className="map-wrap no-text-select" />
+
+      <div className="waypoint-topbar">
+        <button className="waypoint-top-btn">Cancel</button>
+        <div className="waypoint-top-title">Add Waypoint</div>
+        <button className="waypoint-top-btn waypoint-top-save">Save</button>
+      </div>
 
       <div className="map-layer-picker">
         <button className={layer === "streets" ? "active" : ""} onClick={() => setLayer("streets")}>
@@ -355,20 +412,68 @@ export default function MapView({ onMapReady }: Props) {
         </button>
       </div>
 
-      {droppedPin ? (
-        <button
-          className="pin-clear-btn"
-          onClick={() => {
-            setDroppedPin(null);
-            if (typeof window !== "undefined") window.localStorage.removeItem(USER_PIN_STORAGE_KEY);
-            if (userDroppedPinRef.current && mapRef.current) {
-              mapRef.current.removeLayer(userDroppedPinRef.current);
-              userDroppedPinRef.current = null;
-            }
-          }}
-        >
-          Clear Pin
-        </button>
+      {editorOpen && waypoint ? (
+        <div className="waypoint-sheet">
+          <div className="waypoint-grabber" />
+          <label className="waypoint-label">Waypoint Name</label>
+          <input
+            className="waypoint-input"
+            value={waypoint.name}
+            onChange={(e) => saveWaypointEdits({ ...waypoint, name: e.target.value })}
+          />
+
+          <div className="waypoint-label" style={{ marginTop: 12 }}>Type</div>
+          <div className="waypoint-sub">Recently Used</div>
+
+          <div className="waypoint-style-row">
+            {WAYPOINT_ICONS.map((icon) => {
+              const active = waypoint.style.icon === icon;
+              return (
+                <button
+                  key={`icon-${icon}`}
+                  className={`waypoint-style-btn ${active ? "active" : ""}`}
+                  onClick={() => saveWaypointEdits({ ...waypoint, style: { ...waypoint.style, icon } })}
+                >
+                  {icon}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="waypoint-color-row">
+            {WAYPOINT_COLORS.map((color) => {
+              const active = waypoint.style.color === color;
+              return (
+                <button
+                  key={`color-${color}`}
+                  className={`waypoint-color-btn ${active ? "active" : ""}`}
+                  style={{ background: color }}
+                  onClick={() => saveWaypointEdits({ ...waypoint, style: { ...waypoint.style, color } })}
+                />
+              );
+            })}
+          </div>
+
+          <div className="waypoint-actions">
+            <button className="waypoint-save-btn" onClick={() => setEditorOpen(false)}>
+              Save
+            </button>
+            <button
+              className="waypoint-delete-btn"
+              onClick={() => {
+                setWaypoint(null);
+                setEditorOpen(false);
+                if (typeof window !== "undefined") window.localStorage.removeItem(WAYPOINT_STORAGE_KEY);
+                if (waypointMarkerRef.current && mapRef.current) {
+                  mapRef.current.removeLayer(waypointMarkerRef.current);
+                  waypointMarkerRef.current = null;
+                }
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {selectedParcel ? (
