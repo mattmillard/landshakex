@@ -32,9 +32,22 @@ html, body {
   -webkit-touch-callout: none;
 }
 
-.map-layer-picker {
+.press-hint {
   position: fixed;
   top: 58px;
+  left: 14px;
+  z-index: 20;
+  font-size: 11px;
+  color: #d1d5db;
+  background: rgba(12, 18, 30, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+
+.map-layer-picker {
+  position: fixed;
+  top: 88px;
   left: 14px;
   z-index: 20;
   display: flex;

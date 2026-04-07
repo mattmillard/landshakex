@@ -255,13 +255,17 @@ export default function MapView({ onMapReady }: Props) {
         }
       };
 
+      // Long press on desktop + mobile (Leaflet emits contextmenu on long tap mobile).
       map.on("mousedown", (e) => startLongPress(e as import("leaflet").LeafletMouseEvent));
-      map.on("touchstart", (e) => startLongPress(e as import("leaflet").LeafletMouseEvent));
       map.on("mouseup", cancelLongPress);
-      map.on("touchend", cancelLongPress);
       map.on("mouseout", cancelLongPress);
       map.on("dragstart", cancelLongPress);
       map.on("zoomstart", cancelLongPress);
+      map.on("contextmenu", (e) => {
+        cancelLongPress();
+        const ev = e as import("leaflet").LeafletMouseEvent;
+        setWaypointAt(ev.latlng.lat, ev.latlng.lng);
+      });
 
       if (typeof window !== "undefined") {
         try {
@@ -392,13 +396,19 @@ export default function MapView({ onMapReady }: Props) {
 
   return (
     <>
-      <div ref={mapContainerRef} className="map-wrap no-text-select" />
+      <div
+        ref={mapContainerRef}
+        className="map-wrap no-text-select"
+        onContextMenu={(e) => e.preventDefault()}
+      />
 
       <div className="waypoint-topbar">
-        <button className="waypoint-top-btn">Cancel</button>
+        <button className="waypoint-top-btn" onClick={() => setEditorOpen(false)}>Cancel</button>
         <div className="waypoint-top-title">Add Waypoint</div>
-        <button className="waypoint-top-btn waypoint-top-save">Save</button>
+        <button className="waypoint-top-btn waypoint-top-save" onClick={() => setEditorOpen(false)}>Save</button>
       </div>
+
+      <div className="press-hint">Hold on map ~0.35s to drop pin</div>
 
       <div className="map-layer-picker">
         <button className={layer === "streets" ? "active" : ""} onClick={() => setLayer("streets")}>
